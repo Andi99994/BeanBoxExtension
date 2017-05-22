@@ -1,0 +1,34 @@
+Manifest-Version: 1.0
+
+Name: bean/CalcBean.class
+Java-Bean: True
+
+Name: bean/CompositionBean.class
+Java-Bean: True
+
+Name: bean/EvaluationBean.class
+Java-Bean: True
+
+Name: bean/ImageReadBean.class
+Java-Bean: True
+
+Name: bean/MedianBean.class
+Java-Bean: True
+
+Name: bean/OpeningBean.class
+Java-Bean: True
+
+Name: bean/ResultSaveBean.class
+Java-Bean: True
+
+Name: bean/ROIBean.class
+Java-Bean: True
+
+Name: bean/ImageSaveBean.class
+Java-Bean: True
+
+Name: bean/ImageShowBean.class
+Java-Bean: True
+
+Name: bean/ThresholdBean.class
+Java-Bean: True
