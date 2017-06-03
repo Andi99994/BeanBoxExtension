@@ -5,8 +5,6 @@ import sun.beanbox.Wrapper;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.HashMap;
@@ -42,20 +40,14 @@ public class ExportDialog extends JDialog {
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
         Button exportButton = new Button("Export");
-        exportButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                //TODO:perform Export
-            }
+        exportButton.addActionListener(e -> {
+            //TODO:perform Export
         });
         Button cancelButton = new Button("Cancel");
-        cancelButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                int result = showExitDialog();
-                if (result == JOptionPane.YES_OPTION ) {
-                    dispose();
-                }
+        cancelButton.addActionListener(e -> {
+            int result = showExitDialog();
+            if (result == JOptionPane.YES_OPTION ) {
+                dispose();
             }
         });
         buttonPanel.add(exportButton);
@@ -68,32 +60,49 @@ public class ExportDialog extends JDialog {
         return JOptionPane.showConfirmDialog (null, "Do you want to cancel the export?","Cancel",JOptionPane.YES_NO_OPTION);
     }
 
-    private JScrollPane getBeansPanel() {
-        JList<String> list = new JList<>(exporter.getBeans().toArray(new String[exporter.getBeans().size()])); //data has type Object[]
-        list.setSelectionMode(ListSelectionModel.SINGLE_INTERVAL_SELECTION);
-        list.setLayoutOrientation(JList.VERTICAL);
-        list.setVisibleRowCount(-1);
-        JScrollPane listScroller = new JScrollPane(list);
-        listScroller.setPreferredSize(new Dimension(250, 80));
-        return listScroller;
+    private JPanel getBeansPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
+        panel.add(new Label("The following Beans will be generated:"), BorderLayout.PAGE_START);
+        DefaultMutableTreeNode top = new DefaultMutableTreeNode("Beans");
+        createBeanNodes(top, exporter.getBeans());
+        JTree tree = new JTree(top);
+        JScrollPane scrollPane = new JScrollPane(tree);
+        scrollPane.setPreferredSize(new Dimension(250, 80));
+        panel.add(scrollPane, BorderLayout.CENTER);
+        return panel;
     }
 
     private JScrollPane getPropertiesPanel() {
         DefaultMutableTreeNode top = new DefaultMutableTreeNode("Properties");
-        createNodes(top, exporter.getProperties());
+        createPropertyNodes(top, exporter.getProperties());
         JTree tree = new JTree(top);
         JScrollPane listScroller = new JScrollPane(tree);
         listScroller.setPreferredSize(new Dimension(250, 80));
         return listScroller;
     }
 
-    private void createNodes(DefaultMutableTreeNode top, HashMap<String, List<String>> beans) {
-        for(Map.Entry<String, List<String>> entry : beans.entrySet()) {
-            DefaultMutableTreeNode bean = new DefaultMutableTreeNode(entry.getKey());
-            for(String property : entry.getValue()) {
-                bean.add(new DefaultMutableTreeNode(property));
+    private void createPropertyNodes(DefaultMutableTreeNode top, HashMap<String, HashMap<String, List<String>>> beans) {
+        for (Map.Entry<String, HashMap<String, List<String>>> entry : beans.entrySet()) {
+            DefaultMutableTreeNode second = new DefaultMutableTreeNode(entry.getKey());
+            for(Map.Entry<String, List<String>> beanEntry : entry.getValue().entrySet()) {
+                DefaultMutableTreeNode third = new DefaultMutableTreeNode(beanEntry.getKey());
+                for(String property : beanEntry.getValue()) {
+                    third.add(new DefaultMutableTreeNode(property));
+                }
+                second.add(third);
             }
-            top.add(bean);
+            top.add(second);
+        }
+    }
+
+    private void createBeanNodes(DefaultMutableTreeNode top, HashMap<String, HashMap<String, Wrapper>> beans) {
+        for (Map.Entry<String, HashMap<String, Wrapper>> entry : beans.entrySet()) {
+            DefaultMutableTreeNode second = new DefaultMutableTreeNode(entry.getKey());
+            for(Map.Entry<String, Wrapper> beanEntry : entry.getValue().entrySet()) {
+                second.add(new DefaultMutableTreeNode(beanEntry.getKey()));
+            }
+            top.add(second);
         }
     }
 

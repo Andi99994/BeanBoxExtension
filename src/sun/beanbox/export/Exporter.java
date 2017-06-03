@@ -1,58 +1,127 @@
 package sun.beanbox.export;
 
 import sun.beanbox.Wrapper;
+import sun.beanbox.WrapperEventInfo;
+import sun.beanbox.export.datastructure.BeanGraph;
+import sun.beanbox.export.datastructure.ExportBean;
 
 import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Created by Andreas Ertlschweiger on 06.05.2017.
  */
 public class Exporter {
 
-    private HashMap<String, Wrapper> displayBeans = new HashMap<>();
+    private HashMap<String, HashMap<String, Wrapper>> exportBeans = new HashMap<>();
 
-    public Exporter(List<Wrapper> beans) {
-        for (Wrapper wrapper : beans) {
-            if(displayBeans.get(wrapper.getBeanLabel()) == null) {
-                displayBeans.put(wrapper.getBeanLabel(), wrapper);
-            } else {
-                int counter = 2;
-                while(displayBeans.get(wrapper.getBeanLabel()+"(" + counter + ")") != null) {
-                    counter++;
+    public Exporter(List<Wrapper> beans) throws IllegalStateException{
+        List<List<Wrapper>> groupedWrappers = createExportBeans(beans);
+        int counter = 0;
+        for (List<Wrapper> group : groupedWrappers) {
+            HashMap<String, Wrapper> wrappers = new HashMap<>();
+            exportBeans.put("ExportBean" + counter, wrappers);
+            for (Wrapper wrapper : group) {
+                if(wrappers.get(wrapper.getBeanLabel()) == null) {
+                    wrappers.put(wrapper.getBeanLabel(), wrapper);
+                } else {
+                    int beanCount = 2;
+                    while(wrappers.get(wrapper.getBeanLabel()+"(" + beanCount + ")") != null) {
+                        beanCount++;
+                    }
+                    wrappers.put(wrapper.getBeanLabel()+"("+beanCount+")", wrapper);
                 }
-                displayBeans.put(wrapper.getBeanLabel()+"("+counter+")", wrapper);
             }
+            counter++;
         }
     }
 
-    public HashMap<String, List<String>> getProperties() {
-        HashMap<String, List<String>> beans = new HashMap<>();
-        for(Map.Entry<String, Wrapper> entry : displayBeans.entrySet()){
-            List<String> properties = new ArrayList<>();
-            try {
-                BeanInfo beanInfo = Introspector.getBeanInfo(entry.getValue().getBean().getClass());
-                for(PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
-                    if(!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
-                        properties.add(propertyDescriptor.getDisplayName());
+    private List<List<Wrapper>> createExportBeans(List<Wrapper> wrappers) throws IllegalStateException {
+        List<List<Wrapper>> groupedWrappers = groupWrappers(wrappers);
+        List<ExportBean> exportBeans = new LinkedList<>();
+
+        for (List<Wrapper> group : groupedWrappers) {
+            exportBeans.add(assembleExportBean(group));
+        }
+
+        return groupedWrappers;
+    }
+
+    private ExportBean assembleExportBean(List<Wrapper> wrappers) {
+        return null;
+    }
+
+    private List<List<Wrapper>> groupWrappers(List<Wrapper> wrappers) {
+        HashMap<Object, Wrapper> wrapperMap = new HashMap<>();
+        HashMap<Wrapper, Integer> groupMap = new HashMap<>();
+        for (Wrapper wrapper : wrappers) {
+            wrapperMap.put(wrapper.getBean(), wrapper);
+            groupMap.put(wrapper, null);
+        }
+        int groupCount = 0;
+        for (Wrapper wrapper : wrappers) {
+            Integer curGroup = groupMap.get(wrapper);
+            if (curGroup == null) {
+                for (Object bean : wrapper.getListenerBeans()) {
+                    Wrapper beanWrapper = wrapperMap.get(bean);
+                    if (beanWrapper != null && groupMap.get(beanWrapper) != null) {
+                        curGroup = groupMap.get(beanWrapper);
                     }
                 }
-            } catch (IntrospectionException e) {
-                e.printStackTrace();
             }
-            beans.put(entry.getKey(), properties);
+            if (curGroup == null) {
+                curGroup = groupCount;
+                groupCount++;
+            }
+            groupMap.replace(wrapper, curGroup);
+            for (Object bean : wrapper.getListenerBeans()) {
+                Wrapper beanWrapper = wrapperMap.get(bean);
+                if (beanWrapper != null) {
+                    groupMap.replace(beanWrapper, curGroup);
+                }
+            }
+        }
+        HashMap<Integer, List<Wrapper>> groupedWrappers = new HashMap<>();
+        for (Map.Entry<Wrapper, Integer> entry : groupMap.entrySet()) {
+            if (groupedWrappers.containsKey(entry.getValue())) {
+                groupedWrappers.get(entry.getValue()).add(entry.getKey());
+            } else {
+                groupedWrappers.put(entry.getValue(), new LinkedList<>());
+                groupedWrappers.get(entry.getValue()).add(entry.getKey());
+            }
+        }
+        return new ArrayList<>(groupedWrappers.values());
+    }
+
+    public HashMap<String, HashMap<String, List<String>>> getProperties() {
+        HashMap<String, HashMap<String, List<String>>> beans = new HashMap<>();
+        for (Map.Entry<String, HashMap<String, Wrapper>> entry : exportBeans.entrySet()) {
+            HashMap<String, List<String>> beanPropertyMap = new HashMap<>();
+            beans.put(entry.getKey(), beanPropertyMap);
+            for (Map.Entry<String, Wrapper> beanEntry : entry.getValue().entrySet()) {
+                List<String> properties = new ArrayList<>();
+                try {
+                    BeanInfo beanInfo = Introspector.getBeanInfo(beanEntry.getValue().getBean().getClass());
+                    for(PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
+                        if(!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
+                            properties.add(propertyDescriptor.getDisplayName());
+                        }
+                    }
+                } catch (IntrospectionException e) {
+                    e.printStackTrace();
+                }
+                beanPropertyMap.put(beanEntry.getKey(), properties);
+            }
         }
         return beans;
     }
 
-    public List<String> getBeans() {
-        return new ArrayList<>(displayBeans.keySet());
+    public HashMap<String, HashMap<String, Wrapper>> getBeans() {
+        return exportBeans;
     }
 }

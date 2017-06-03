@@ -37,10 +37,9 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Enumeration;
-import java.util.Hashtable;
-import java.util.Vector;
+import java.util.*;
 
+import com.sun.jmx.snmp.Enumerated;
 import sunw.beanbox.PropertyHookup;
 
 public class Wrapper extends Panel implements Serializable, MouseListener,
@@ -1035,6 +1034,22 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
             listeners.add(target);
             listenerBeans.put(name, listeners);
         }
+    }
+
+    //Andreas Ertlschweiger 2017
+    public List<Object> getListenerBeans() {
+        List<Object> listeners = new ArrayList<>();
+        for (Vector vector : listenerBeans.values()){
+            Enumeration elements = vector.elements();
+            while (elements.hasMoreElements()) {
+                listeners.add(elements.nextElement());
+            }
+        }
+        for (Object eventTarget : eventTargets) {
+            WrapperEventTarget target = (WrapperEventTarget) eventTarget;
+            listeners.add(target.targetBean);
+        }
+        return listeners;
     }
 
     // ----------------------------------------------------------------------
