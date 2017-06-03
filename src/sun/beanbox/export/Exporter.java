@@ -62,7 +62,14 @@ public class Exporter {
         for (Wrapper wrapper : wrappers) {
             createBeanNode(wrapper, createdNodes);
         }
+        List<BeanNode> inputBeans = inferInputBeans(createdNodes);
+        List<BeanNode> outputBeans = inferOutputBeans(createdNodes);
+        BeanGraph beanGraph = new BeanGraph(inputBeans, outputBeans);
         return null;
+    }
+
+    private List<BeanNode> inferInputBeans(HashMap<Wrapper, BeanNode> createdNodes) {
+        Set<BeanNode> availableNodes = new HashSet<>(createdNodes.values());
     }
 
     private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) {

@@ -1,6 +1,8 @@
 package sun.beanbox.export;
 
 import sun.beanbox.Wrapper;
+import sun.beanbox.export.components.AbstractTreeTableModel;
+import sun.beanbox.export.components.JTreeTable;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -32,10 +34,9 @@ public class ExportDialog extends JDialog {
         });
         this.setLayout(new BorderLayout());
         JTabbedPane tabbedPane = new JTabbedPane();
-        JPanel methodsPanel = new JPanel();
         tabbedPane.addTab("Beans", getBeansPanel());
         tabbedPane.addTab("Properties", getPropertiesPanel());
-        tabbedPane.addTab("Methods", methodsPanel);
+        tabbedPane.addTab("Methods", getMethodsPanel());
         this.add(tabbedPane, BorderLayout.CENTER);
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
@@ -54,6 +55,19 @@ public class ExportDialog extends JDialog {
         buttonPanel.add(cancelButton);
         this.add(buttonPanel, BorderLayout.PAGE_END);
         this.setSize(new Dimension(800, 600));
+    }
+
+    private Component getMethodsPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
+        panel.add(new Label("The following Methods will be generated:"), BorderLayout.PAGE_START);
+        DefaultMutableTreeNode top = new DefaultMutableTreeNode("Beans");
+        createBeanNodes(top, exporter.getBeans());
+        JTree tree = new JTree(top);
+        JScrollPane scrollPane = new JScrollPane(tree);
+        scrollPane.setPreferredSize(new Dimension(250, 80));
+        panel.add(scrollPane, BorderLayout.CENTER);
+        return panel;
     }
 
     private int showExitDialog() {
