@@ -1047,7 +1047,15 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         }
         for (Object eventTarget : eventTargets) {
             WrapperEventTarget target = (WrapperEventTarget) eventTarget;
-            listeners.add(target.targetBean);
+            if (target.targetBean != null) {
+                listeners.add(target.targetBean);
+            }
+        }
+        for (Object propertyTarget : propertyTargets) {
+            WrapperPropertyEventInfo target = (WrapperPropertyEventInfo) propertyTarget;
+            if (target.targetBean != null) {
+                listeners.add(target.targetBean);
+            }
         }
         return listeners;
     }

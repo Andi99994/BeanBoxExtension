@@ -3,6 +3,7 @@ package sun.beanbox.export;
 import sun.beanbox.Wrapper;
 import sun.beanbox.WrapperEventInfo;
 import sun.beanbox.export.datastructure.BeanGraph;
+import sun.beanbox.export.datastructure.BeanNode;
 import sun.beanbox.export.datastructure.ExportBean;
 
 import java.beans.BeanInfo;
@@ -19,9 +20,12 @@ import java.util.stream.Collectors;
 public class Exporter {
 
     private HashMap<String, HashMap<String, Wrapper>> exportBeans = new HashMap<>();
+    private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
 
     public Exporter(List<Wrapper> beans) throws IllegalStateException{
         List<List<Wrapper>> groupedWrappers = createExportBeans(beans);
+
+        //Temporary Code
         int counter = 0;
         for (List<Wrapper> group : groupedWrappers) {
             HashMap<String, Wrapper> wrappers = new HashMap<>();
@@ -39,6 +43,7 @@ public class Exporter {
             }
             counter++;
         }
+        //End Temp
     }
 
     private List<List<Wrapper>> createExportBeans(List<Wrapper> wrappers) throws IllegalStateException {
@@ -53,14 +58,34 @@ public class Exporter {
     }
 
     private ExportBean assembleExportBean(List<Wrapper> wrappers) {
+        HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
+        for (Wrapper wrapper : wrappers) {
+            createBeanNode(wrapper, createdNodes);
+        }
         return null;
     }
 
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) {
+        if(createdNodes.get(wrapper) != null) {
+            return createdNodes.get(wrapper);
+        }
+        BeanNode beanNode = new BeanNode(wrapper.getBean(), wrapper.getBeanLabel());
+        createdNodes.put(wrapper, beanNode);
+        List<BeanNode> endNodes = new LinkedList<>();
+        for (Object end : wrapper.getListenerBeans()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end);
+            if (beanWrapper != null) {
+                endNodes.add(createBeanNode(beanWrapper, createdNodes));
+            }
+        }
+        beanNode.setEnd(endNodes);
+        return beanNode;
+    }
+
     private List<List<Wrapper>> groupWrappers(List<Wrapper> wrappers) {
-        HashMap<Object, Wrapper> wrapperMap = new HashMap<>();
         HashMap<Wrapper, Integer> groupMap = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
-            wrapperMap.put(wrapper.getBean(), wrapper);
+            wrapperBeanMap.put(wrapper.getBean(), wrapper);
             groupMap.put(wrapper, null);
         }
         int groupCount = 0;
@@ -68,7 +93,7 @@ public class Exporter {
             Integer curGroup = groupMap.get(wrapper);
             if (curGroup == null) {
                 for (Object bean : wrapper.getListenerBeans()) {
-                    Wrapper beanWrapper = wrapperMap.get(bean);
+                    Wrapper beanWrapper = wrapperBeanMap.get(bean);
                     if (beanWrapper != null && groupMap.get(beanWrapper) != null) {
                         curGroup = groupMap.get(beanWrapper);
                     }
@@ -80,7 +105,7 @@ public class Exporter {
             }
             groupMap.replace(wrapper, curGroup);
             for (Object bean : wrapper.getListenerBeans()) {
-                Wrapper beanWrapper = wrapperMap.get(bean);
+                Wrapper beanWrapper = wrapperBeanMap.get(bean);
                 if (beanWrapper != null) {
                     groupMap.replace(beanWrapper, curGroup);
                 }
@@ -98,6 +123,7 @@ public class Exporter {
         return new ArrayList<>(groupedWrappers.values());
     }
 
+    //Temporary Code
     public HashMap<String, HashMap<String, List<String>>> getProperties() {
         HashMap<String, HashMap<String, List<String>>> beans = new HashMap<>();
         for (Map.Entry<String, HashMap<String, Wrapper>> entry : exportBeans.entrySet()) {
@@ -124,4 +150,5 @@ public class Exporter {
     public HashMap<String, HashMap<String, Wrapper>> getBeans() {
         return exportBeans;
     }
+    //End Temp
 }

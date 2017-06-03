@@ -20,6 +20,7 @@ public class BeanGraph {
     public void setStartNodes(List<BeanNode> startNodes) {
         this.startNodes = startNodes;
     }
+
     public int getBreadth(){
         int breadth = startNodes.size();
         List<BeanNode> currentLevel = new ArrayList<>();

@@ -11,9 +11,9 @@ public class BeanNode {
     private Object data;
     private List<BeanNode> end;
 
-    public BeanNode(Object start, String displayName, List<BeanNode> end){
-        this.data = start;
-        this.end = end;
+    public BeanNode(Object data, String displayName){
+        this.displayName = displayName;
+        this.data = data;
     }
 
     public String getDisplayName() {
@@ -26,10 +26,6 @@ public class BeanNode {
 
     public Object getData() {
         return data;
-    }
-
-    public void setData(Object data) {
-        this.data = data;
     }
 
     public List<BeanNode> getEnd() {
