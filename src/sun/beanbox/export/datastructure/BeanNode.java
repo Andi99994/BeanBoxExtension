@@ -1,5 +1,10 @@
 package sun.beanbox.export.datastructure;
 
+import java.beans.BeanInfo;
+import java.beans.IntrospectionException;
+import java.beans.Introspector;
+import java.beans.PropertyDescriptor;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -9,9 +14,10 @@ public class BeanNode {
 
     private String displayName;
     private Object data;
-    private List<BeanNode> end;
+    private List<BeanEdge> edges = new LinkedList<>();
+    private List<ExportProperty> properties = new LinkedList<>();
 
-    public BeanNode(Object data, String displayName){
+    public BeanNode(Object data, String displayName) throws IntrospectionException {
         this.displayName = displayName;
         this.data = data;
     }
@@ -28,11 +34,15 @@ public class BeanNode {
         return data;
     }
 
-    public List<BeanNode> getEnd() {
-        return end;
+    public List<BeanEdge> getEdges() {
+        return edges;
     }
 
-    public void setEnd(List<BeanNode> end) {
-        this.end = end;
+    public void addEdge(BeanEdge edge) {
+        edges.add(edge);
+    }
+
+    public List<ExportProperty> getProperties() {
+        return properties;
     }
 }

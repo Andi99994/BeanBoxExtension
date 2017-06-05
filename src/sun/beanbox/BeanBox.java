@@ -491,8 +491,14 @@ public class BeanBox extends Panel implements Serializable, Runnable,
         rectangle = null;
         exporting = false;
         repaint();
-        ExportDialog exportDialog = new ExportDialog(this.getFrame(), new Exporter(selectedComponents));
-        exportDialog.show();
+        try {
+            ExportDialog exportDialog = new ExportDialog(this.getFrame(), new Exporter(selectedComponents));
+            exportDialog.show();
+        } catch (IntrospectionException e) {
+            error("Could not read properties of one or more Beans", e);
+        } catch (IllegalArgumentException e) {
+            error("You need to select at least one input and output node if inferring is not possible", e);
+        }
 
         //TODO:finish
     }

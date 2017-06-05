@@ -1036,8 +1036,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         }
     }
 
-    //Andreas Ertlschweiger 2017
-    public List<Object> getListenerBeans() {
+    public List<Object> getCompositionTargets() {
         List<Object> listeners = new ArrayList<>();
         for (Vector vector : listenerBeans.values()){
             Enumeration elements = vector.elements();
@@ -1051,6 +1050,40 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
                 listeners.add(target.targetBean);
             }
         }
+        for (Object propertyTarget : propertyTargets) {
+            WrapperPropertyEventInfo target = (WrapperPropertyEventInfo) propertyTarget;
+            if (target.targetBean != null) {
+                listeners.add(target.targetBean);
+            }
+        }
+        return listeners;
+    }
+
+    //Andreas Ertlschweiger 2017
+    public List<Object> getDirectTargets() {
+        List<Object> listeners = new ArrayList<>();
+        for (Vector vector : listenerBeans.values()){
+            Enumeration elements = vector.elements();
+            while (elements.hasMoreElements()) {
+                listeners.add(elements.nextElement());
+            }
+        }
+        return listeners;
+    }
+
+    public List<Object> getEventHookupTargets() {
+        List<Object> listeners = new ArrayList<>();
+        for (Object eventTarget : eventTargets) {
+            WrapperEventTarget target = (WrapperEventTarget) eventTarget;
+            if (target.targetBean != null) {
+                listeners.add(target.targetBean);
+            }
+        }
+        return listeners;
+    }
+
+    public List<Object> getPropertyTargets() {
+        List<Object> listeners = new ArrayList<>();
         for (Object propertyTarget : propertyTargets) {
             WrapperPropertyEventInfo target = (WrapperPropertyEventInfo) propertyTarget;
             if (target.targetBean != null) {

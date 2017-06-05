@@ -2,9 +2,8 @@ package sun.beanbox.export;
 
 import sun.beanbox.Wrapper;
 import sun.beanbox.WrapperEventInfo;
-import sun.beanbox.export.datastructure.BeanGraph;
-import sun.beanbox.export.datastructure.BeanNode;
-import sun.beanbox.export.datastructure.ExportBean;
+import sun.beanbox.export.components.NodeSelector;
+import sun.beanbox.export.datastructure.*;
 
 import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
@@ -19,73 +18,96 @@ import java.util.stream.Collectors;
  */
 public class Exporter {
 
-    private HashMap<String, HashMap<String, Wrapper>> exportBeans = new HashMap<>();
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
+    private List<ExportBean> exportBeans = new LinkedList<>();
 
-    public Exporter(List<Wrapper> beans) throws IllegalStateException{
-        List<List<Wrapper>> groupedWrappers = createExportBeans(beans);
-
-        //Temporary Code
-        int counter = 0;
-        for (List<Wrapper> group : groupedWrappers) {
-            HashMap<String, Wrapper> wrappers = new HashMap<>();
-            exportBeans.put("ExportBean" + counter, wrappers);
-            for (Wrapper wrapper : group) {
-                if(wrappers.get(wrapper.getBeanLabel()) == null) {
-                    wrappers.put(wrapper.getBeanLabel(), wrapper);
-                } else {
-                    int beanCount = 2;
-                    while(wrappers.get(wrapper.getBeanLabel()+"(" + beanCount + ")") != null) {
-                        beanCount++;
-                    }
-                    wrappers.put(wrapper.getBeanLabel()+"("+beanCount+")", wrapper);
-                }
-            }
-            counter++;
+    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException {
+        for (List<Wrapper> group : groupWrappers(beans)) {
+            exportBeans.add(assembleExportBean(group, "ExportBean" + exportBeans.size()));
         }
-        //End Temp
     }
 
-    private List<List<Wrapper>> createExportBeans(List<Wrapper> wrappers) throws IllegalStateException {
-        List<List<Wrapper>> groupedWrappers = groupWrappers(wrappers);
-        List<ExportBean> exportBeans = new LinkedList<>();
-
-        for (List<Wrapper> group : groupedWrappers) {
-            exportBeans.add(assembleExportBean(group));
-        }
-
-        return groupedWrappers;
-    }
-
-    private ExportBean assembleExportBean(List<Wrapper> wrappers) {
+    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
             createBeanNode(wrapper, createdNodes);
         }
         List<BeanNode> inputBeans = inferInputBeans(createdNodes);
         List<BeanNode> outputBeans = inferOutputBeans(createdNodes);
-        BeanGraph beanGraph = new BeanGraph(inputBeans, outputBeans);
-        return null;
+        BeanGraph beanGraph = new BeanGraph(inputBeans, outputBeans, createdNodes.values());
+        return new ExportBean(beanGraph, name);
     }
 
-    private List<BeanNode> inferInputBeans(HashMap<Wrapper, BeanNode> createdNodes) {
+    private List<BeanNode> inferOutputBeans(HashMap<Wrapper, BeanNode> createdNodes) throws IllegalArgumentException {
+        List<BeanNode> availableNodes = new LinkedList<>();
+        for (BeanNode node : createdNodes.values()) {
+            if (node.getEdges().isEmpty()) {
+                availableNodes.add(node);
+            }
+        }
+        if(availableNodes.isEmpty()) {
+            availableNodes.addAll(createdNodes.values());
+            new NodeSelector(null, availableNodes, "Could not infer output Beans (maybe you have cyclic references in your composition?). Please select from the list below.").show();
+        }
+        if (availableNodes.isEmpty()) {
+            throw new IllegalArgumentException("Cannot export without selection of at least one output node");
+        }
+        return availableNodes;
+    }
+
+    private List<BeanNode> inferInputBeans(HashMap<Wrapper, BeanNode> createdNodes) throws IllegalArgumentException {
         Set<BeanNode> availableNodes = new HashSet<>(createdNodes.values());
+        for (BeanNode node : createdNodes.values()) {
+            for(BeanEdge edge : node.getEdges()) {
+                if(availableNodes.contains(edge.getEnd())) {
+                    availableNodes.remove(edge.getEnd());
+                }
+            }
+        }
+        if(availableNodes.isEmpty()) {
+            List<BeanNode> availableBeans = new LinkedList<>(createdNodes.values());
+            new NodeSelector(null, availableBeans, "Could not infer input Beans (maybe you have cyclic references in your composition?). Please select from the list below.").show();
+            availableNodes.addAll(availableBeans);
+        }
+        if (availableNodes.isEmpty()) {
+            throw new IllegalArgumentException("Cannot export without selection of at least one input node");
+        }
+        return new ArrayList<>(availableNodes);
     }
 
-    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) {
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException{
         if(createdNodes.get(wrapper) != null) {
             return createdNodes.get(wrapper);
         }
         BeanNode beanNode = new BeanNode(wrapper.getBean(), wrapper.getBeanLabel());
-        createdNodes.put(wrapper, beanNode);
-        List<BeanNode> endNodes = new LinkedList<>();
-        for (Object end : wrapper.getListenerBeans()) {
-            Wrapper beanWrapper = wrapperBeanMap.get(end);
-            if (beanWrapper != null) {
-                endNodes.add(createBeanNode(beanWrapper, createdNodes));
+        BeanInfo beanInfo = Introspector.getBeanInfo(beanNode.getData().getClass());
+        for (PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
+            if (!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
+                beanNode.getProperties().add(new ExportProperty(propertyDescriptor, beanNode));
             }
         }
-        beanNode.setEnd(endNodes);
+        createdNodes.put(wrapper, beanNode);
+        for (Object end : wrapper.getDirectTargets()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end);
+            if (beanWrapper != null) {
+                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
+                beanNode.addEdge(new BeanEdge(beanNode, childNode, BeanEdge.CompositionType.DIRECT));
+            }
+        }
+        for (Object end : wrapper.getEventHookupTargets()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end);
+            if (beanWrapper != null) {
+                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
+                beanNode.addEdge(new BeanEdge(beanNode, childNode, BeanEdge.CompositionType.HOOKUP));
+            }
+        }
+        for (Object end : wrapper.getPropertyTargets()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end);
+            if (beanWrapper != null) {
+                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
+                beanNode.addEdge(new BeanEdge(beanNode, childNode, BeanEdge.CompositionType.PROPERTY));
+            }
+        }
         return beanNode;
     }
 
@@ -99,7 +121,7 @@ public class Exporter {
         for (Wrapper wrapper : wrappers) {
             Integer curGroup = groupMap.get(wrapper);
             if (curGroup == null) {
-                for (Object bean : wrapper.getListenerBeans()) {
+                for (Object bean : wrapper.getCompositionTargets()) {
                     Wrapper beanWrapper = wrapperBeanMap.get(bean);
                     if (beanWrapper != null && groupMap.get(beanWrapper) != null) {
                         curGroup = groupMap.get(beanWrapper);
@@ -111,7 +133,7 @@ public class Exporter {
                 groupCount++;
             }
             groupMap.replace(wrapper, curGroup);
-            for (Object bean : wrapper.getListenerBeans()) {
+            for (Object bean : wrapper.getCompositionTargets()) {
                 Wrapper beanWrapper = wrapperBeanMap.get(bean);
                 if (beanWrapper != null) {
                     groupMap.replace(beanWrapper, curGroup);
@@ -130,32 +152,7 @@ public class Exporter {
         return new ArrayList<>(groupedWrappers.values());
     }
 
-    //Temporary Code
-    public HashMap<String, HashMap<String, List<String>>> getProperties() {
-        HashMap<String, HashMap<String, List<String>>> beans = new HashMap<>();
-        for (Map.Entry<String, HashMap<String, Wrapper>> entry : exportBeans.entrySet()) {
-            HashMap<String, List<String>> beanPropertyMap = new HashMap<>();
-            beans.put(entry.getKey(), beanPropertyMap);
-            for (Map.Entry<String, Wrapper> beanEntry : entry.getValue().entrySet()) {
-                List<String> properties = new ArrayList<>();
-                try {
-                    BeanInfo beanInfo = Introspector.getBeanInfo(beanEntry.getValue().getBean().getClass());
-                    for(PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
-                        if(!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
-                            properties.add(propertyDescriptor.getDisplayName());
-                        }
-                    }
-                } catch (IntrospectionException e) {
-                    e.printStackTrace();
-                }
-                beanPropertyMap.put(beanEntry.getKey(), properties);
-            }
-        }
-        return beans;
-    }
-
-    public HashMap<String, HashMap<String, Wrapper>> getBeans() {
+    public List<ExportBean> getBeans() {
         return exportBeans;
     }
-    //End Temp
 }

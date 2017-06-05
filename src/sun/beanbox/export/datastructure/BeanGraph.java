@@ -7,33 +7,14 @@ import java.util.*;
  */
 public class BeanGraph {
 
-    private List<BeanNode> inputNodes;
-    private List<BeanNode> outputNodes;
+    private List<BeanNode> inputNodes = new LinkedList<>();
+    private List<BeanNode> outputNodes = new LinkedList<>();
+    private List<BeanNode> allNodes = new LinkedList<>();
 
-    public BeanGraph(List<BeanNode> inputNodes, List<BeanNode> outputNodes){
-        this.inputNodes = inputNodes;
-        this.outputNodes = outputNodes;
-    }
-
-    public int getBreadth(){
-        int breadth = inputNodes.size();
-        List<BeanNode> currentLevel = new ArrayList<>();
-        Set<BeanNode> visitedNodes = new HashSet<>();
-        currentLevel.addAll(inputNodes);
-        while (!currentLevel.isEmpty()){
-            breadth = currentLevel.size() > breadth ? currentLevel.size() : breadth;
-            List<BeanNode> nextLevel = new ArrayList<>();
-            for (BeanNode node : currentLevel) {
-                for (BeanNode childNode : node.getEnd()){
-                    if (!visitedNodes.contains(childNode)){
-                        nextLevel.add(childNode);
-                        visitedNodes.add(childNode);
-                    }
-                }
-            }
-            currentLevel = nextLevel;
-        }
-        return breadth;
+    public BeanGraph(Collection<BeanNode> inputNodes, Collection<BeanNode> outputNodes, Collection<BeanNode> allNodes){
+        this.inputNodes.addAll(inputNodes);
+        this.outputNodes.addAll(outputNodes);
+        this.allNodes.addAll(allNodes);
     }
 
     public List<BeanNode> getInputNodes() {
@@ -50,5 +31,13 @@ public class BeanGraph {
 
     public void setOutputNodes(List<BeanNode> outputNodes) {
         this.outputNodes = outputNodes;
+    }
+
+    public List<BeanNode> getAllNodes() {
+        return allNodes;
+    }
+
+    public void setAllNodes(List<BeanNode> allNodes) {
+        this.allNodes = allNodes;
     }
 }
