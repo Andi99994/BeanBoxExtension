@@ -35,4 +35,8 @@ public class ExportProperty {
     public BeanNode getNode() {
         return node;
     }
+
+    public String toString() {
+        return getName();
+    }
 }

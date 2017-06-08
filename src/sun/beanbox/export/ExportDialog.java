@@ -1,32 +1,51 @@
 package sun.beanbox.export;
 
-import sun.beanbox.export.components.*;
+
+import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyBooleanWrapper;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.embed.swing.JFXPanel;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.*;
+import javafx.scene.control.Label;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.paint.Color;
+import javafx.util.Callback;
+import sun.beanbox.export.components.PropertyTreeTableCell;
 import sun.beanbox.export.datastructure.BeanNode;
 import sun.beanbox.export.datastructure.ExportBean;
 import sun.beanbox.export.datastructure.ExportProperty;
 
 import javax.swing.*;
-import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
+
 
 /**
  * Created by Andreas Ertlschweiger on 06.05.2017.
  */
 public class ExportDialog extends JDialog {
 
-    private Exporter exporter;
     private Frame owner;
+
+    private Exporter exporter;
 
     public ExportDialog(Frame owner, Exporter exporter) {
         super(owner, "Bean Export", true);
         this.owner = owner;
         this.exporter = exporter;
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+        setSize(new Dimension(800, 600));
         addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent windowEvent) {
                 int result = showExitDialog();
@@ -35,151 +54,190 @@ public class ExportDialog extends JDialog {
                 }
             }
         });
-        this.setLayout(new BorderLayout());
-        JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.addTab("Beans", getBeansPanel());
-        tabbedPane.addTab("Properties", getPropertiesPanel());
-        tabbedPane.addTab("Methods", getMethodsPanel());
-        this.add(tabbedPane, BorderLayout.CENTER);
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
-        Button exportButton = new Button("Export");
-        exportButton.addActionListener(e -> {
-            //TODO:perform Export
+
+        final JFXPanel fxPanel = new JFXPanel();
+        add(fxPanel);
+        final BorderPane root = new BorderPane();
+        root.setPrefSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        root.setMaxSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        root.setMinSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        Platform.setImplicitExit(false);
+        Platform.runLater(() -> {
+            Scene scene = new Scene(root, Color.ALICEBLUE);
+            fxPanel.setScene(scene);
+            initUI(root);
         });
+    }
+
+    private int showExitDialog() {
+        return JOptionPane.showConfirmDialog(null,
+                "Do you want to cancel the export?", "Cancel", JOptionPane.YES_NO_OPTION);
+    }
+
+    private void initUI(BorderPane root) {
+        TabPane tabPane = new TabPane();
+        HBox controlBox = new HBox();
+        controlBox.setPadding(new Insets(5, 5, 5, 5));
+        root.setCenter(tabPane);
+        root.setBottom(controlBox);
+
+        tabPane.setPrefSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        tabPane.setMaxSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        tabPane.setMinSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+
+        HBox locationBox = new HBox();
+        locationBox.setSpacing(3);
+        Label locationText = new Label();
+
+        locationText.setStyle("-fx-border-color: black;");
+        locationBox.getChildren().add(locationText);
+        controlBox.getChildren().add(locationBox);
+
+        HBox buttonBox = new HBox();
+        buttonBox.setAlignment(Pos.CENTER_RIGHT);
+        buttonBox.setSpacing(3);
+        controlBox.getChildren().add(buttonBox);
+        Button exportButton = new Button("Export");
         Button cancelButton = new Button("Cancel");
-        cancelButton.addActionListener(e -> {
+        buttonBox.getChildren().add(exportButton);
+        buttonBox.getChildren().add(cancelButton);
+        exportButton.setOnAction(event -> {
+            //TODO: Export
+        });
+        cancelButton.setOnAction(event -> SwingUtilities.invokeLater(() -> {
             int result = showExitDialog();
             if (result == JOptionPane.YES_OPTION) {
                 dispose();
             }
-        });
-        buttonPanel.add(exportButton);
-        buttonPanel.add(cancelButton);
-        this.add(buttonPanel, BorderLayout.PAGE_END);
-        this.setSize(new Dimension(800, 600));
+        }));
+
+        HBox.setHgrow(locationBox, Priority.ALWAYS);
+        HBox.setHgrow(buttonBox, Priority.ALWAYS);
+
+        Tab beanTab = new Tab("Beans");
+        beanTab.setClosable(false);
+        beanTab.setContent(getBeanPane());
+        Tab propertyTab = new Tab("Properties");
+        propertyTab.setClosable(false);
+        propertyTab.setContent(getPropertiesPane());
+        Tab methodTab = new Tab("Methods");
+        methodTab.setClosable(false);
+        tabPane.getTabs().addAll(beanTab, propertyTab, methodTab);
     }
 
-    private Component getMethodsPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout());
-        panel.add(new Label("The following Methods will be generated:"), BorderLayout.PAGE_START);
-        DefaultMutableTreeNode top = new DefaultMutableTreeNode("Beans");
-        createBeanNodes(top, exporter.getBeans());
-        JTree tree = new JTree(top);
-        JScrollPane scrollPane = new JScrollPane(tree);
-        scrollPane.setPreferredSize(new Dimension(250, 80));
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
+    private BorderPane getBeanPane() {
+        BorderPane pane = new BorderPane();
+        pane.setTop(new Label("The following Beans will be generated:"));
+
+        TreeItem<Object> rootNode = new TreeItem<>();
+        List<ExportBean> exportBeanList = new ArrayList<>(exporter.getBeans());
+        for (ExportBean bean : exportBeanList) {
+            TreeItem<Object> item = new TreeItem<>(bean);
+            for (BeanNode node : bean.getBeans().getAllNodes()) {
+                item.getChildren().add(new TreeItem<>(node));
+            }
+            rootNode.getChildren().add(item);
+        }
+
+        TreeView<Object> treeView = new TreeView<>(rootNode);
+        treeView.setShowRoot(false);
+        pane.setCenter(treeView);
+
+        return pane;
     }
 
-    private int showExitDialog() {
-        return JOptionPane.showConfirmDialog(null, "Do you want to cancel the export?", "Cancel", JOptionPane.YES_NO_OPTION);
-    }
+    private BorderPane getPropertiesPane() {
+        BorderPane pane = new BorderPane();
+        pane.setTop(new Label("The following Properties will be generated:"));
 
-    private JPanel getBeansPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout());
-        panel.add(new Label("The following Beans will be generated:"), BorderLayout.PAGE_START);
-        DefaultMutableTreeNode top = new DefaultMutableTreeNode("Beans");
-        createBeanNodes(top, exporter.getBeans());
-        JTree tree = new JTree(top);
-        JScrollPane scrollPane = new JScrollPane(tree);
-        scrollPane.setPreferredSize(new Dimension(250, 80));
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
-    }
-
-    private JPanel getPropertiesPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout());
-        panel.add(new Label("The following Properties will be generated:"), BorderLayout.PAGE_START);
-        JPanel tablePanel = new JPanel(new GridBagLayout());
-        tablePanel.setPreferredSize(new Dimension(250, 80));
-
-        AbstractTreeTableModel model = new PropertyTreeTableModel(exporter.getBeans().get(0));
-        JTreeTable table = new JTreeTable(model);
-        table.setDefaultRenderer(ExportProperty.class, new PropertyCellRenderer(owner));
-        panel.add(new JScrollPane(table));
-
-        /*
-        AbstractTreeTableModel treeTableModel = new MyDataModel(createDataStructure());
-        JTreeTable myTreeTable = new JTreeTable(treeTableModel);
-        panel.add(new JScrollPane(myTreeTable));
-        JScrollPane scrollPane = new JScrollPane(tablePanel);
-        scrollPane.setPreferredSize(new Dimension(250, 80));
-        panel.add(scrollPane, BorderLayout.CENTER);
-        GridBagConstraints c = new GridBagConstraints();
-        c.anchor = GridBagConstraints.NORTHWEST;
-        //c.insets = new Insets(0,5,0,5);
-        c.gridy = 0;
-        c.gridx = 0;
-        for(ExportBean bean : exporter.getBeans()) {
-            JTreeTable table = new JTreeTable(new PropertyTreeTableModel(bean));
-            tablePanel.add(table.getTableHeader(),c);
-            c.gridy += 1;
-            tablePanel.add(table, c);
-            c.gridy += 1;
-        }*/
-        return panel;
-    }
-    private static MyDataNode createDataStructure() {
-        List<MyDataNode> children1 = new ArrayList<MyDataNode>();
-        children1.add(new MyDataNode("N12", "C12", new Date(), Integer.valueOf(50), null));
-        children1.add(new MyDataNode("N13", "C13", new Date(), Integer.valueOf(60), null));
-        children1.add(new MyDataNode("N14", "C14", new Date(), Integer.valueOf(70), null));
-        children1.add(new MyDataNode("N15", "C15", new Date(), Integer.valueOf(80), null));
-
-        List<MyDataNode> children2 = new ArrayList<MyDataNode>();
-        children2.add(new MyDataNode("N12", "C12", new Date(), Integer.valueOf(10), null));
-        children2.add(new MyDataNode("N13", "C13", new Date(), Integer.valueOf(20), children1));
-        children2.add(new MyDataNode("N14", "C14", new Date(), Integer.valueOf(30), null));
-        children2.add(new MyDataNode("N15", "C15", new Date(), Integer.valueOf(40), null));
-
-        List<MyDataNode> rootNodes = new ArrayList<MyDataNode>();
-        rootNodes.add(new MyDataNode("N1", "C1", new Date(), Integer.valueOf(10), children2));
-        rootNodes.add(new MyDataNode("N2", "C2", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N3", "C3", new Date(), Integer.valueOf(10), children2));
-        rootNodes.add(new MyDataNode("N4", "C4", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N5", "C5", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N6", "C6", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N7", "C7", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N8", "C8", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N9", "C9", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N10", "C10", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N11", "C11", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N12", "C7", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N13", "C8", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N14", "C9", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N15", "C10", new Date(), Integer.valueOf(10), children1));
-        rootNodes.add(new MyDataNode("N16", "C11", new Date(), Integer.valueOf(10), children1));
-        MyDataNode root = new MyDataNode("R1", "R1", new Date(), Integer.valueOf(10), rootNodes);
-
-        return root;
-    }
-
-    private void createPropertyNodes(DefaultMutableTreeNode top, List<ExportBean> exportBeans) {
-        for (ExportBean exportBean : exportBeans) {
-            DefaultMutableTreeNode second = new DefaultMutableTreeNode(exportBean.getBeanName());
-            for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getDisplayName());
+        TreeItem<Object> rootNode = new TreeItem<>();
+        List<ExportBean> exportBeanList = new ArrayList<>(exporter.getBeans());
+        for (ExportBean bean : exportBeanList) {
+            TreeItem<Object> second = new TreeItem<>(bean);
+            for (BeanNode node : bean.getBeans().getAllNodes()) {
+                TreeItem<Object> third = new TreeItem<>(node);
                 for (ExportProperty property : node.getProperties()) {
-                    third.add(new DefaultMutableTreeNode(property.getName()));
+                    third.getChildren().add(new TreeItem<>(property));
                 }
-                second.add(third);
+                second.getChildren().add(third);
             }
-            top.add(second);
+            rootNode.getChildren().add(second);
         }
-    }
 
-    private void createBeanNodes(DefaultMutableTreeNode top, List<ExportBean> exportBeans) {
-        for (ExportBean exportBean : exportBeans) {
-            DefaultMutableTreeNode second = new DefaultMutableTreeNode(exportBean.getBeanName());
-            for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                second.add(new DefaultMutableTreeNode(node.getDisplayName()));
+        TreeTableColumn<Object, String> nameColumn = new TreeTableColumn<>("Node");
+        nameColumn.setPrefWidth(150);
+        nameColumn.setCellValueFactory((TreeTableColumn.CellDataFeatures<Object, String> param) -> {
+            Object node = param.getValue().getValue();
+            String result = null;
+            if (node instanceof ExportBean) {
+                result = ((ExportBean) node).getBeanName();
+            } else if (node instanceof BeanNode) {
+                result = ((BeanNode) node).getDisplayName();
+            } else if (node instanceof ExportProperty) {
+                result = ((ExportProperty) node).getName();
             }
-            top.add(second);
-        }
-    }
+            return result != null ? new ReadOnlyStringWrapper(result) : null;
+        });
 
+        TreeTableColumn<Object, Object> valueColumn = new TreeTableColumn<>();
+        Label valueLabel = new Label("Default Value");
+        valueLabel.setTooltip(new Tooltip("You can configure any default values you want to set"));
+        valueColumn.setGraphic(valueLabel);
+        valueColumn.setPrefWidth(150);
+        valueColumn.setCellValueFactory((TreeTableColumn.CellDataFeatures<Object, Object> param) -> {
+            Object node = param.getValue().getValue();
+            if (node instanceof ExportProperty) {
+                return new ReadOnlyObjectWrapper<>(node);
+            }
+            return null;
+        });
+        valueColumn.setCellFactory(param -> new PropertyTreeTableCell());
+
+        TreeTableColumn<Object, Boolean> configColumn = new TreeTableColumn<>();
+        Label configLabel = new Label("Configurable");
+        configLabel.setTooltip(new Tooltip("If checked, the property will be configurable after export"));
+        configColumn.setGraphic(configLabel);
+        configColumn.setMinWidth(100);
+        configColumn.setMaxWidth(100);
+        configColumn.setCellValueFactory(param -> {
+            Object node = param.getValue().getValue();
+            if (node instanceof ExportProperty) {
+                return new ReadOnlyBooleanWrapper(((ExportProperty) node).isExport());
+            }
+            return null;
+        });
+        configColumn.setCellFactory(new Callback<TreeTableColumn<Object, Boolean>, TreeTableCell<Object, Boolean>>() {
+            @Override
+            public TreeTableCell<Object, Boolean> call(TreeTableColumn<Object, Boolean> param) {
+                return new TreeTableCell<Object, Boolean>() {
+                    CheckBox checkBox = new CheckBox();
+
+                    @Override
+                    protected void updateItem(Boolean item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (item == null || empty) {
+                            setGraphic(null);
+                            return;
+                        }
+                        if (getTreeTableRow() != null && getTreeTableRow().getTreeItem() != null
+                                && getTreeTableRow().getTreeItem().getValue() != null
+                                && getTreeTableRow().getTreeItem().getValue() instanceof ExportProperty) {
+                            ExportProperty property = (ExportProperty) getTreeTableRow().getTreeItem().getValue();
+                            checkBox.setSelected(property.isExport());
+                            checkBox.setOnAction(event -> property.setExport(checkBox.isSelected()));
+                            setGraphic(checkBox);
+                        }
+                    }
+                };
+            }
+        });
+
+        TreeTableView<Object> treeView = new TreeTableView<>(rootNode);
+        treeView.setShowRoot(false);
+        treeView.getColumns().addAll(nameColumn, valueColumn, configColumn);
+        treeView.setColumnResizePolicy(TreeTableView.CONSTRAINED_RESIZE_POLICY);
+        pane.setCenter(treeView);
+
+        return pane;
+    }
 }
