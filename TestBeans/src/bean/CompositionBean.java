@@ -11,7 +11,7 @@ import java.util.EventListener;
 /**
  * Created by Andi on 05.05.2017.
  */
-public class CompositionBean implements Serializable {
+public class CompositionBean implements ImageProcessListener, Serializable {
 
     private ImageReadBean imageReadBean = new ImageReadBean();
     private ROIBean roiBean = new ROIBean();
@@ -44,6 +44,7 @@ public class CompositionBean implements Serializable {
         }
     }
 
+    @Override
     public void process(ImageProcessEvent event) {
         imageReadBean.process(event);
     }
