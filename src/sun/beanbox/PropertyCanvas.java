@@ -7,9 +7,9 @@ import java.awt.*;
 import java.awt.event.*;
 import java.beans.*;
 
-class PropertyCanvas extends Canvas implements MouseListener {
+public class PropertyCanvas extends Canvas implements MouseListener {
 
-    PropertyCanvas(Frame frame, PropertyEditor pe) {
+    public PropertyCanvas(Frame frame, PropertyEditor pe) {
         this.frame = frame;
         editor = pe;
         addMouseListener(this);

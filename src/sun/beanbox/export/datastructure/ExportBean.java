@@ -38,4 +38,9 @@ public class ExportBean {
     public List<ExportProperty> getProperties() {
         return properties;
     }
+
+    @Override
+    public String toString() {
+        return beanName;
+    }
 }

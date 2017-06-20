@@ -45,4 +45,9 @@ public class BeanNode {
     public List<ExportProperty> getProperties() {
         return properties;
     }
+
+    @Override
+    public String toString() {
+        return displayName;
+    }
 }

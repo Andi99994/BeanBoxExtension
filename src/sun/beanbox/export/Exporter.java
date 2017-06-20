@@ -9,7 +9,9 @@ import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
+import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -21,13 +23,15 @@ public class Exporter {
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
 
-    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException {
+    private File saveDirectory = new File(".");
+
+    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
         for (List<Wrapper> group : groupWrappers(beans)) {
             exportBeans.add(assembleExportBean(group, "ExportBean" + exportBeans.size()));
         }
     }
 
-    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException {
+    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
             createBeanNode(wrapper, createdNodes);
@@ -75,7 +79,7 @@ public class Exporter {
         return new ArrayList<>(availableNodes);
     }
 
-    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException{
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException {
         if(createdNodes.get(wrapper) != null) {
             return createdNodes.get(wrapper);
         }
@@ -154,5 +158,13 @@ public class Exporter {
 
     public List<ExportBean> getBeans() {
         return exportBeans;
+    }
+
+    public File getSaveDirectory() {
+        return saveDirectory;
+    }
+
+    public void setSaveDirectory(File saveDirectory) {
+        this.saveDirectory = saveDirectory;
     }
 }

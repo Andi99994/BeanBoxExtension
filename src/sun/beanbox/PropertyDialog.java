@@ -7,14 +7,14 @@ import java.awt.*;
 import java.awt.event.*;
 import java.beans.*;
 
-class PropertyDialog extends Dialog implements ActionListener {
+public class PropertyDialog extends Dialog implements ActionListener {
 
     private Button doneButton;
     private Component body;
     private final static int vPad = 5;
     private final static int hPad = 4;
 
-    PropertyDialog(Frame frame, PropertyEditor pe, int x, int y) {
+    public PropertyDialog(Frame frame, PropertyEditor pe, int x, int y) {
         super(frame, pe.getClass().getName(), true);
         new WindowCloser(this);
         setLayout(null);

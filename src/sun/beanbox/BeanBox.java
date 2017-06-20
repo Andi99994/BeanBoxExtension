@@ -46,6 +46,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -498,6 +499,10 @@ public class BeanBox extends Panel implements Serializable, Runnable,
             error("Could not read properties of one or more Beans", e);
         } catch (IllegalArgumentException e) {
             error("You need to select at least one input and output node if inferring is not possible", e);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
         }
 
         //TODO:finish
