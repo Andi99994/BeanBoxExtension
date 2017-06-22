@@ -1,19 +1,14 @@
 package sun.beanbox.export;
 
 import sun.beanbox.Wrapper;
-import sun.beanbox.WrapperEventInfo;
 import sun.beanbox.export.components.NodeSelector;
 import sun.beanbox.export.datastructure.*;
 
-import java.beans.BeanInfo;
-import java.beans.IntrospectionException;
-import java.beans.Introspector;
-import java.beans.PropertyDescriptor;
+import javax.lang.model.SourceVersion;
+import java.beans.*;
 import java.io.File;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Created by Andreas Ertlschweiger on 06.05.2017.
@@ -25,9 +20,11 @@ public class Exporter {
 
     private File saveDirectory = new File(".");
 
+    private static final String DEFAULT_BEAN_NAME = "ExportBean";
+
     public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
         for (List<Wrapper> group : groupWrappers(beans)) {
-            exportBeans.add(assembleExportBean(group, "ExportBean" + exportBeans.size()));
+            exportBeans.add(assembleExportBean(group, DEFAULT_BEAN_NAME + exportBeans.size()));
         }
     }
 
@@ -90,26 +87,29 @@ public class Exporter {
                 beanNode.getProperties().add(new ExportProperty(propertyDescriptor, beanNode));
             }
         }
+        for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
+            beanNode.getMethods().add(new ExportMethod(methodDescriptor, beanNode));
+        }
         createdNodes.put(wrapper, beanNode);
         for (Object end : wrapper.getDirectTargets()) {
             Wrapper beanWrapper = wrapperBeanMap.get(end);
             if (beanWrapper != null) {
                 BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
-                beanNode.addEdge(new BeanEdge(beanNode, childNode, BeanEdge.CompositionType.DIRECT));
+                beanNode.addEdge(new DirectCompositionEdge(beanNode, childNode));
             }
         }
         for (Object end : wrapper.getEventHookupTargets()) {
             Wrapper beanWrapper = wrapperBeanMap.get(end);
             if (beanWrapper != null) {
                 BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
-                beanNode.addEdge(new BeanEdge(beanNode, childNode, BeanEdge.CompositionType.HOOKUP));
+                beanNode.addEdge(new AdapterCompositionEdge(beanNode, childNode));
             }
         }
         for (Object end : wrapper.getPropertyTargets()) {
             Wrapper beanWrapper = wrapperBeanMap.get(end);
             if (beanWrapper != null) {
                 BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
-                beanNode.addEdge(new BeanEdge(beanNode, childNode, BeanEdge.CompositionType.PROPERTY));
+                beanNode.addEdge(new PropertyBindingEdge(beanNode, childNode));
             }
         }
         return beanNode;
@@ -166,5 +166,14 @@ public class Exporter {
 
     public void setSaveDirectory(File saveDirectory) {
         this.saveDirectory = saveDirectory;
+    }
+
+    public boolean checkIfValidClassName(String text) {
+        boolean isValidClassName = text != null && !text.isEmpty() && text.length() < 64 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
+        if(!isValidClassName) return false;
+        for (ExportBean exportBean : exportBeans) {
+            if(exportBean.getBeanName().equals(text)) return false;
+        }
+        return true;
     }
 }

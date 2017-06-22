@@ -1071,6 +1071,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         return listeners;
     }
 
+    //Andreas Ertlschweiger 2017
     public List<Object> getEventHookupTargets() {
         List<Object> listeners = new ArrayList<>();
         for (Object eventTarget : eventTargets) {
@@ -1082,6 +1083,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         return listeners;
     }
 
+    //Andreas Ertlschweiger 2017
     public List<Object> getPropertyTargets() {
         List<Object> listeners = new ArrayList<>();
         for (Object propertyTarget : propertyTargets) {

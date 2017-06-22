@@ -1,11 +1,9 @@
 package sun.beanbox.export.datastructure;
 
-import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
-import java.beans.Introspector;
-import java.beans.PropertyDescriptor;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Created by Andi on 26.05.2017.
@@ -16,6 +14,8 @@ public class BeanNode {
     private Object data;
     private List<BeanEdge> edges = new LinkedList<>();
     private List<ExportProperty> properties = new LinkedList<>();
+    private List<ExportMethod> methods = new LinkedList<>();
+    private boolean registerInManifest = false;
 
     public BeanNode(Object data, String displayName) throws IntrospectionException {
         this.displayName = displayName;
@@ -26,16 +26,27 @@ public class BeanNode {
         return displayName;
     }
 
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
-
     public Object getData() {
         return data;
     }
 
     public List<BeanEdge> getEdges() {
         return edges;
+    }
+
+    public List<DirectCompositionEdge> getDirectCompositionEdges() {
+        return edges.stream().filter(beanEdge -> beanEdge instanceof DirectCompositionEdge)
+                .map(beanEdge -> (DirectCompositionEdge)beanEdge).collect(Collectors.toList());
+    }
+
+    public List<AdapterCompositionEdge> getAdapterCompositionEdges() {
+        return edges.stream().filter(beanEdge -> beanEdge instanceof AdapterCompositionEdge)
+                .map(beanEdge -> (AdapterCompositionEdge)beanEdge).collect(Collectors.toList());
+    }
+
+    public List<PropertyBindingEdge> getPropertyBindingEdges() {
+        return edges.stream().filter(beanEdge -> beanEdge instanceof PropertyBindingEdge)
+                .map(beanEdge -> (PropertyBindingEdge)beanEdge).collect(Collectors.toList());
     }
 
     public void addEdge(BeanEdge edge) {
@@ -46,8 +57,20 @@ public class BeanNode {
         return properties;
     }
 
+    public boolean isRegisterInManifest() {
+        return registerInManifest;
+    }
+
+    public void setRegisterInManifest(boolean registerInManifest) {
+        this.registerInManifest = registerInManifest;
+    }
+
     @Override
     public String toString() {
         return displayName;
+    }
+
+    public List<ExportMethod> getMethods() {
+        return methods;
     }
 }
