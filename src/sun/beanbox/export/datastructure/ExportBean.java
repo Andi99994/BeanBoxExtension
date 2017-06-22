@@ -1,5 +1,6 @@
 package sun.beanbox.export.datastructure;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -10,13 +11,11 @@ public class ExportBean {
 
     private String beanName;
     private BeanGraph beans;
-    private List<ExportProperty> properties = new LinkedList<>();
     private List<ExportMethod> methods = new LinkedList<>();
 
     public ExportBean(BeanGraph beans, String beanName) {
         this.beans = beans;
         this.beanName = beanName;
-        beans.getAllNodes().forEach(bean -> properties.addAll(bean.getProperties()));
     }
 
     public BeanGraph getBeans() {
@@ -36,7 +35,15 @@ public class ExportBean {
     }
 
     public List<ExportProperty> getProperties() {
-        return properties;
+        List<ExportProperty> exportProperties = new ArrayList<>();
+        for (BeanNode node : beans.getAllNodes()) {
+            for(ExportProperty property : node.getProperties()) {
+                if (property.isExport()) {
+                    exportProperties.add(property);
+                }
+            }
+        }
+        return exportProperties;
     }
 
     @Override

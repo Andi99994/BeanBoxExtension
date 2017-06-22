@@ -12,6 +12,7 @@ public class ExportProperty {
     private boolean export = true;
     private BeanNode node;
     private Object defaultValue;
+    private String name;
 
     public ExportProperty(PropertyDescriptor propertyDescriptor, BeanNode node) throws InvocationTargetException, IllegalAccessException {
         this.propertyDescriptor = propertyDescriptor;
@@ -20,7 +21,15 @@ public class ExportProperty {
     }
 
     public String getName() {
-        return propertyDescriptor.getDisplayName();
+        if(name == null || name.isEmpty()) {
+            return propertyDescriptor.getName();
+        } else {
+            return name;
+        }
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public boolean isExport() {
@@ -53,6 +62,6 @@ public class ExportProperty {
 
     @Override
     public String toString() {
-        return propertyDescriptor.getDisplayName();
+        return propertyDescriptor.getDisplayName() + " (" + getName() + ")";
     }
 }

@@ -169,10 +169,19 @@ public class Exporter {
     }
 
     public boolean checkIfValidClassName(String text) {
-        boolean isValidClassName = text != null && !text.isEmpty() && text.length() < 64 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
+        boolean isValidClassName = text != null && !text.isEmpty() && text.length() < 32 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
         if(!isValidClassName) return false;
         for (ExportBean exportBean : exportBeans) {
             if(exportBean.getBeanName().equals(text)) return false;
+        }
+        return true;
+    }
+
+    public boolean checkIfValidPropertyName(ExportBean exportBean, String text) {
+        boolean isValidPropertyName = text != null && !text.isEmpty() && text.length() < 32 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
+        if(!isValidPropertyName) return false;
+        for (ExportProperty property : exportBean.getProperties()) {
+            if(property.getName().equals(text)) return false;
         }
         return true;
     }

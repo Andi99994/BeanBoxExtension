@@ -1,8 +1,13 @@
 package sun.beanbox.export.components;
 
+import sun.beanbox.export.Exporter;
+import sun.beanbox.export.datastructure.ExportBean;
 import sun.beanbox.export.datastructure.ExportProperty;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.xml.soap.Text;
 import java.awt.*;
 import java.beans.PropertyEditor;
 import java.lang.reflect.InvocationTargetException;
@@ -12,27 +17,47 @@ import java.lang.reflect.InvocationTargetException;
  */
 public class ExportPropertyEditor extends JPanel {
 
-    public ExportPropertyEditor(Frame owner, ExportProperty exportProperty) {
+    public ExportPropertyEditor(Frame owner, Exporter exporter, ExportProperty exportProperty, JTree tree, DefaultMutableTreeNode treeNode) {
+        setLayout(new GridBagLayout());
+
+        JLabel name = new JLabel("Name: ");
+        name.setToolTipText("The name of the property. It must be unique among all configurable properties and be a valid Java identifier.");
+        JLabel nameCheckLabel = new JLabel("Valid name");
+        TextField nameText = new TextField();
+        nameText.setText(exportProperty.getName());
+        nameText.addTextListener(e -> {
+            ExportBean exportBean = (ExportBean) ((DefaultMutableTreeNode) treeNode.getParent().getParent()).getUserObject();
+            if (exporter.checkIfValidPropertyName(exportBean, nameText.getText())) {
+                exportProperty.setName(nameText.getText());
+                nameCheckLabel.setText("Valid name");
+                DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
+                model.nodeChanged(treeNode);
+            } else {
+                nameCheckLabel.setText("Invalid name");
+            }
+        });
+        nameText.setColumns(22);
         JLabel currentValue = new JLabel("Current value:");
         currentValue.setAlignmentX(Component.CENTER_ALIGNMENT);
         currentValue.setToolTipText("The currently configured value");
         JLabel defaultValue = new JLabel("Default value:");
         defaultValue.setAlignmentX(Component.CENTER_ALIGNMENT);
-        defaultValue.setToolTipText("Configure a default value to be set after exporting. By default this is equal to the currently configured value. Be aware of any property bindings or property veto listeners!");
+        defaultValue.setToolTipText("Configure a default value to be set after exporting. By default this is equal " +
+                "to the currently configured value. Be aware of any property bindings or property veto listeners!");
         JCheckBox configurable = new JCheckBox("Configurable");
         configurable.setAlignmentX(Component.CENTER_ALIGNMENT);
         configurable.setSelected(exportProperty.isExport());
         configurable.addActionListener(e -> exportProperty.setExport(configurable.isSelected()));
         configurable.setToolTipText("Select whether the property should still be configurable after export");
-        removeAll();
-        repaint();
-        add(currentValue);
+
+        Component propertyDisplay;
         try {
-            add(new PropertyDisplayCanvas(150, 50, exportProperty, PropertyValueType.CURRENT_VALUE));
+            propertyDisplay = new PropertyDisplayCanvas(150, 50, exportProperty, PropertyValueType.CURRENT_VALUE);
         } catch (InvocationTargetException | IllegalAccessException e) {
-            add(new JLabel("Could not load editor or value"));
+            propertyDisplay = new JLabel("Could not load editor or value");
         }
-        add(defaultValue);
+
+        Component propertyEditor;
         try {
             PropertyEditorComponent propertyEditorComponent = new PropertyEditorComponent(154, 54, exportProperty, PropertyValueType.DEFAULT_VALUE, owner);
             propertyEditorComponent.addPropertyChangeListener(evt -> {
@@ -85,10 +110,32 @@ public class ExportPropertyEditor extends JPanel {
                 }*/
                 }
             });
-            add(propertyEditorComponent);
+            propertyEditor = propertyEditorComponent;
         } catch (InvocationTargetException | IllegalAccessException e) {
-            add(new JLabel("Could not load editor or value"));
+            propertyEditor = new JLabel("Could not load editor or value");
         }
-        add(configurable);
+
+        GridBagConstraints c = new GridBagConstraints();
+        c.weightx = 20;
+        add(name, c);
+        c.weightx = 80;
+        c.gridx = 1;
+        add(nameText, c);
+        c.gridy = 1;
+        add(nameCheckLabel, c);
+        c.gridx = 0;
+        c.gridy = 2;
+        add(currentValue, c);
+        c.gridx = 1;
+        add(propertyDisplay, c);
+        c.gridy = 3;
+        c.gridx = 0;
+        add(defaultValue, c);
+        c.gridx = 1;
+        add(propertyEditor, c);
+        c.gridy = 4;
+        c.gridx = 0;
+        c.gridwidth = 2;
+        add(configurable, c);
     }
 }

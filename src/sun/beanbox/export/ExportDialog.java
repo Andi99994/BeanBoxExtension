@@ -163,7 +163,7 @@ public class ExportDialog extends JDialog {
                 DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getDisplayName());
                 third.setUserObject(node);
                 for (ExportProperty property : node.getProperties()) {
-                    DefaultMutableTreeNode fourth = new DefaultMutableTreeNode(property.getName());
+                    DefaultMutableTreeNode fourth = new DefaultMutableTreeNode(property.toString());
                     fourth.setUserObject(property);
                     third.add(fourth);
                 }
@@ -183,7 +183,7 @@ public class ExportDialog extends JDialog {
                 panel.setViewportView(new BeanNodeEditor((BeanNode) treeNode.getUserObject()));
                 return;
             } else if (treeNode.getUserObject() instanceof ExportProperty) {
-                panel.setViewportView(new ExportPropertyEditor(owner, (ExportProperty) treeNode.getUserObject()));
+                panel.setViewportView(new ExportPropertyEditor(owner, exporter, (ExportProperty) treeNode.getUserObject(), tree, treeNode));
                 return;
             }
             panel.setViewportView(new JLabel("Unknown node type"));
