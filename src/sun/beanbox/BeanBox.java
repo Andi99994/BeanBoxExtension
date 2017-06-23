@@ -492,6 +492,9 @@ public class BeanBox extends Panel implements Serializable, Runnable,
         rectangle = null;
         exporting = false;
         repaint();
+        if(selectedComponents.isEmpty()) {
+            return;
+        }
         try {
             ExportDialog exportDialog = new ExportDialog(this.getFrame(), new Exporter(selectedComponents));
             exportDialog.show();
@@ -500,12 +503,10 @@ public class BeanBox extends Panel implements Serializable, Runnable,
         } catch (IllegalArgumentException e) {
             error("You need to select at least one input and output node if inferring is not possible", e);
         } catch (IllegalAccessException e) {
-            e.printStackTrace();
+            error("Could not access properties", e);
         } catch (InvocationTargetException e) {
-            e.printStackTrace();
+            error("Could not invoke methods", e);
         }
-
-        //TODO:finish
     }
 
     /**

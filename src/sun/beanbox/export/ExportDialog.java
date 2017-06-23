@@ -1,5 +1,6 @@
 package sun.beanbox.export;
 
+import sun.beanbox.ErrorDialog;
 import sun.beanbox.export.components.BeanNodeEditor;
 import sun.beanbox.export.components.ExportBeanEditor;
 import sun.beanbox.export.components.ExportPropertyEditor;
@@ -16,6 +17,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
 import java.util.List;
 
 /**
@@ -44,30 +46,24 @@ public class ExportDialog extends JDialog {
         tabbedPane.addTab("Beans", getBeansPanel());
         tabbedPane.addTab("Methods", getMethodsPanel());
         this.add(tabbedPane, BorderLayout.CENTER);
-        JPanel directoryPanel = new JPanel();
-        directoryPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
-        JLabel directoryLabel = new JLabel(exporter.getSaveDirectory().getAbsolutePath());
-        directoryPanel.add(directoryLabel);
-        JButton directoryButton = new JButton("Select");
-        directoryButton.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setCurrentDirectory(exporter.getSaveDirectory());
-            chooser.setDialogTitle("Select a save directory");
-            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            chooser.setAcceptAllFileFilterUsed(false);
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION && chooser.getSelectedFile() != null) {
-                exporter.setSaveDirectory(chooser.getSelectedFile());
-                System.out.println(exporter.getSaveDirectory().getAbsolutePath());
-                directoryLabel.setText(exporter.getSaveDirectory().getAbsolutePath());
-            }
-        });
-        directoryPanel.add(directoryButton);
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
         JButton exportButton = new JButton("Export");
         exportButton.addActionListener(e -> {
-            //TODO:perform Export
+            FileDialog fd = new FileDialog(owner, "Save Export Bean", FileDialog.SAVE);
+            fd.setDirectory(System.getProperty("user.dir"));
+            fd.setFile("ExportBean.jar");
+            fd.show();
+            if (fd.getFile() == null || fd.getDirectory() == null || fd.getFile().isEmpty() ||fd.getDirectory().isEmpty()) {
+                return;
+            }
+            try {
+                exporter.export(fd.getDirectory(), fd.getFile());
+                dispose();
+            } catch (Exception ex) {
+                new ErrorDialog(owner, ex.getMessage());
+            }
         });
 
         JButton cancelButton = new JButton("Cancel");
@@ -79,10 +75,7 @@ public class ExportDialog extends JDialog {
         });
         buttonPanel.add(exportButton);
         buttonPanel.add(cancelButton);
-        JSplitPane controlPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, directoryPanel, buttonPanel);
-        controlPane.setResizeWeight(0.5);
-        controlPane.setDividerSize(0);
-        this.add(controlPane, BorderLayout.PAGE_END);
+        this.add(buttonPanel, BorderLayout.PAGE_END);
         this.setSize(new Dimension(800, 600));
     }
 

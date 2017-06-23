@@ -6,9 +6,10 @@ import sun.beanbox.export.datastructure.*;
 
 import javax.lang.model.SourceVersion;
 import java.beans.*;
-import java.io.File;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Created by Andreas Ertlschweiger on 06.05.2017.
@@ -18,7 +19,10 @@ public class Exporter {
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
 
-    private File saveDirectory = new File(".");
+    private String tmpDirectoryName = "/tmp";
+    private static final String DEFAULT_BEAN_PACKAGE_NAME = "beanBoxGeneratedBeans";
+    private static final String DEFAULT_SERIALIZED_PROPERTIES_PACKAGE_NAME = "beanBoxGeneratedProperties";
+    private static final String DEFAULT_ADAPTER_PACKAGE_NAME = "beanBoxGeneratedAdapters";
 
     private static final String DEFAULT_BEAN_NAME = "ExportBean";
 
@@ -160,14 +164,6 @@ public class Exporter {
         return exportBeans;
     }
 
-    public File getSaveDirectory() {
-        return saveDirectory;
-    }
-
-    public void setSaveDirectory(File saveDirectory) {
-        this.saveDirectory = saveDirectory;
-    }
-
     public boolean checkIfValidClassName(String text) {
         boolean isValidClassName = text != null && !text.isEmpty() && text.length() < 32 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
         if(!isValidClassName) return false;
@@ -184,5 +180,135 @@ public class Exporter {
             if(property.getName().equals(text)) return false;
         }
         return true;
+    }
+
+    public void export(String directory, String filename) throws Exception {
+        String[] filenameSplit = filename.split(Pattern.quote("."));
+        if(!filenameSplit[filenameSplit.length - 1].equals("jar")) filename+= ".jar";
+        if(new File(directory, filename).isFile()) throw new IOException("File already exists!");
+        int counter = 0;
+        while (new File(directory + tmpDirectoryName + counter).isDirectory()) {
+            counter++;
+        }
+        tmpDirectoryName+= counter;
+
+        if (validateConfiguration()) {
+            File tmpBeanDirectory = new File(directory + tmpDirectoryName + "/" + DEFAULT_BEAN_PACKAGE_NAME);
+            File tmpPropertiesDirectory = new File(directory + tmpDirectoryName + "/" + DEFAULT_SERIALIZED_PROPERTIES_PACKAGE_NAME);
+            File tmpManifestDirectory = new File(directory + tmpDirectoryName + "/META-INF");
+            if(tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdir() && tmpManifestDirectory.mkdir()) {
+                for(ExportBean exportBean : exportBeans) {
+                    generateBean(tmpBeanDirectory, tmpPropertiesDirectory, exportBean);
+                }
+                generateManifest(tmpManifestDirectory);
+            } else {
+                throw new IOException("Error creating temporary directories at: " + directory);
+            }
+        }
+    }
+
+    private void generateManifest(File manifestDirectory) throws IOException{
+        File manifest = new File(manifestDirectory.getAbsolutePath(), "MANIFEST.MF");
+        if (!manifest.createNewFile()) throw new IOException("Error creating File: " + manifest.getName());
+        PrintWriter writer = new PrintWriter(new FileWriter(manifest));
+        writer.println("Manifest-Version: 1.0");
+        writer.println();
+        for (ExportBean exportBean : exportBeans) {
+            writer.println("Name: " + DEFAULT_BEAN_PACKAGE_NAME + "/" + exportBean.getBeanName() + ".class");
+            writer.println("Java-Bean: True");
+            writer.println();
+            for (BeanNode beanNode : exportBean.getBeans().getAllNodes()) {
+                if (beanNode.isRegisterInManifest()) {
+                    writer.println("Name: " + beanNode.getData().getClass().getCanonicalName() + ".class"); //TODO: Fix
+                    writer.println("Java-Bean: True");
+                    writer.println();
+                }
+            }
+        }
+        writer.close();
+        if(writer.checkError()) {
+            throw new IOException("Error writing Manifest");
+        }
+    }
+
+    private void generateBean(File beanDirectory, File propertyDirectory, ExportBean exportBean) throws IOException {
+        File bean = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java");
+        File beanInfo = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java");
+        if (!bean.createNewFile()) throw new IOException("Error creating File: " + bean.getName());
+        if (!beanInfo.createNewFile()) throw new IOException("Error creating File: " + beanInfo.getName());
+        PrintWriter writer = new PrintWriter(new FileWriter(bean));
+        writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME + ";");
+        writer.println();
+        //TODO: print imports
+        writer.println();
+        writer.println("public class " + exportBean.getBeanName() + " {");
+        writer.println();
+        //TODO: print properties
+        writer.println();
+        writer.println("    public " + exportBean.getBeanName() + "() {");
+        //TODO:initialize pipeline
+        writer.println("    }");
+        writer.println();
+        //TODO:print property getter & setter
+        writer.println();
+        //TODO: print input & output interface
+        writer.println("}");
+        writer.println();
+        writer.close();
+        if(writer.checkError()) {
+            throw new IOException("Error writing Bean File: " + exportBean.getBeanName());
+        }
+
+        writer = new PrintWriter(new FileWriter(beanInfo));
+        writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME + ";");
+        writer.println();
+        //TODO: print imports
+        writer.println();
+        writer.println("import java.beans.*;");
+        writer.println("import java.io.Serializable;");
+        writer.println();
+        writer.println("public class " + exportBean.getBeanName() + "BeanInfo extends SimpleBeanInfo implements Serializable {");
+        writer.println();
+        writer.println("    @Override");
+        writer.println("    public PropertyDescriptor[] getPropertyDescriptors() {");
+        writer.println("        try {");
+        writer.println("            Class cls = " + exportBean.getBeanName() + ".class;");
+        //TODO: print property descriptors
+        writer.println("        } catch (IntrospectionException e) {");
+        writer.println("            e.printStackTrace();");
+        writer.println("        }");
+        writer.println("        return null;");
+        writer.println("    }");
+        writer.println();
+        writer.println("    @Override");
+        writer.println("    public EventSetDescriptor[] getEventSetDescriptors() {");
+        writer.println("        try {");
+        //TODO: print event descriptors
+        writer.println("        } catch (IntrospectionException e) {");
+        writer.println("            e.printStackTrace();");
+        writer.println("        }");
+        writer.println("        return null;");
+        writer.println("    }");
+        writer.println();
+        writer.println("    @Override");
+        writer.println("    public MethodDescriptor[] getMethodDescriptors() {");
+        writer.println("        try {");
+        //TODO: print method descriptors
+        writer.println("        } catch (NoSuchMethodException e) {");
+        writer.println("            e.printStackTrace();");
+        writer.println("        }");
+        writer.println("        return null;");
+        writer.println("    }");
+        writer.println("}");
+        writer.println();
+        writer.close();
+        if(writer.checkError()) {
+            throw new IOException("Error writing BeanInfo File: " + exportBean.getBeanName());
+        }
+    }
+
+    private boolean validateConfiguration() {
+        return true;
+        //TODO
     }
 }
