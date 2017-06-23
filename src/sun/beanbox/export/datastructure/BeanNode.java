@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
  */
 public class BeanNode {
 
-    private String displayName;
+    private String name;
     private Object data;
     private List<BeanEdge> edges = new LinkedList<>();
     private List<ExportProperty> properties = new LinkedList<>();
@@ -18,12 +18,16 @@ public class BeanNode {
     private boolean registerInManifest = false;
 
     public BeanNode(Object data, String displayName) throws IntrospectionException {
-        this.displayName = displayName;
+        this.name = displayName;
         this.data = data;
     }
 
-    public String getDisplayName() {
-        return displayName;
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public Object getData() {
@@ -67,10 +71,18 @@ public class BeanNode {
 
     @Override
     public String toString() {
-        return displayName;
+        return name;
     }
 
     public List<ExportMethod> getMethods() {
         return methods;
+    }
+
+    public String lowercaseFirst() {
+        char c[] = getName().toCharArray();
+        if(Character.isLetter(c[0])) {
+            c[0] = Character.toLowerCase(c[0]);
+        }
+        return new String(c);
     }
 }

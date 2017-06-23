@@ -78,7 +78,7 @@ public class NodeSelector extends JDialog {
         public Component getListCellRendererComponent(JList list, Object value,
                                                       int index, boolean isSelected, boolean cellHasFocus) {
             BeanNode entry = (BeanNode) value;
-            setText(entry.getDisplayName());
+            setText(entry.getName());
             if (isSelected) {
                 setBackground(HIGHLIGHT_COLOR);
                 setForeground(Color.white);

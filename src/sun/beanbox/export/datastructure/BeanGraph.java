@@ -15,6 +15,19 @@ public class BeanGraph {
         this.inputNodes.addAll(inputNodes);
         this.outputNodes.addAll(outputNodes);
         this.allNodes.addAll(allNodes);
+        Set<String> beanNames = new HashSet<>();
+        for (BeanNode node : allNodes) {
+            String beanName = node.getName();
+            int counter = 2;
+            if(beanNames.contains(beanName)) {
+                while (beanNames.contains(beanName + counter)) {
+                    counter++;
+                }
+                beanName+= counter;
+                node.setName(beanName);
+            }
+            beanNames.add(beanName);
+        }
     }
 
     public List<BeanNode> getInputNodes() {

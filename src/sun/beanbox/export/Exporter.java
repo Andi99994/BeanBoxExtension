@@ -219,7 +219,7 @@ public class Exporter {
             writer.println();
             for (BeanNode beanNode : exportBean.getBeans().getAllNodes()) {
                 if (beanNode.isRegisterInManifest()) {
-                    writer.println("Name: " + beanNode.getData().getClass().getCanonicalName() + ".class"); //TODO: Fix
+                    writer.println("Name: " + beanNode.getData().getClass().getCanonicalName().replaceAll(Pattern.quote("."), "/") + ".class");
                     writer.println("Java-Bean: True");
                     writer.println();
                 }
@@ -232,6 +232,8 @@ public class Exporter {
     }
 
     private void generateBean(File beanDirectory, File propertyDirectory, ExportBean exportBean) throws IOException {
+        List<ExportProperty> exportProperties = exportBean.getProperties();
+
         File bean = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java");
         File beanInfo = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java");
         if (!bean.createNewFile()) throw new IOException("Error creating File: " + bean.getName());
@@ -239,17 +241,36 @@ public class Exporter {
         PrintWriter writer = new PrintWriter(new FileWriter(bean));
         writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME + ";");
         writer.println();
+        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+            writer.println("import " + node.getData().getClass().getCanonicalName() + ";");
+        }
+        writer.println();
+        for (ExportProperty exportProperty : exportProperties) {
+            writer.println("import " + exportProperty.getPropertyType().getCanonicalName() + ";");
+        }
         //TODO: print imports
         writer.println();
-        writer.println("public class " + exportBean.getBeanName() + " {");
+        writer.println("public class " + exportBean.getBeanName() + " {"); //TODO:implements Serializable?
         writer.println();
-        //TODO: print properties
+        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+            writer.println("private " + node.getData().getClass().getCanonicalName() + " " + node.lowercaseFirst() + ";");
+        }
+        writer.println();
+        for (ExportProperty exportProperty : exportProperties) {
+            writer.println("private " + exportProperty.getPropertyType().getCanonicalName() + " " + exportProperty.getName() + ";");
+        }
         writer.println();
         writer.println("    public " + exportBean.getBeanName() + "() {");
         //TODO:initialize pipeline
         writer.println("    }");
         writer.println();
-        //TODO:print property getter & setter
+        for (ExportProperty property : exportProperties) {
+            writer.println("    public " + property.getPropertyType().getCanonicalName() + " get" + property.uppercaseFirst() + "() {");
+            writer.println("        return " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getReadMethod().getName() + "();");
+            writer.println("    }");
+            writer.println();
+        }
+        //TODO:print property setter
         writer.println();
         //TODO: print input & output interface
         writer.println("}");

@@ -19,14 +19,13 @@ public class ExportPropertyEditor extends JPanel {
 
     public ExportPropertyEditor(Frame owner, Exporter exporter, ExportProperty exportProperty, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
-
+        ExportBean exportBean = (ExportBean) ((DefaultMutableTreeNode) treeNode.getParent().getParent()).getUserObject();
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("The name of the property. It must be unique among all configurable properties and be a valid Java identifier.");
-        JLabel nameCheckLabel = new JLabel("Valid name");
         TextField nameText = new TextField();
         nameText.setText(exportProperty.getName());
+        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidPropertyName(exportBean, nameText.getText()) ? "Valid name" : "Invalid name");
         nameText.addTextListener(e -> {
-            ExportBean exportBean = (ExportBean) ((DefaultMutableTreeNode) treeNode.getParent().getParent()).getUserObject();
             if (exporter.checkIfValidPropertyName(exportBean, nameText.getText())) {
                 exportProperty.setName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
@@ -42,8 +41,8 @@ public class ExportPropertyEditor extends JPanel {
         currentValue.setToolTipText("The currently configured value");
         JLabel defaultValue = new JLabel("Default value:");
         defaultValue.setAlignmentX(Component.CENTER_ALIGNMENT);
-        defaultValue.setToolTipText("Configure a default value to be set after exporting. By default this is equal " +
-                "to the currently configured value. Be aware of any property bindings or property veto listeners!");
+        defaultValue.setToolTipText("Configure a default value to be set after exporting. Be aware of any property bindings or property veto listeners!" +
+                "Any complex types must be serializable.");
         JCheckBox configurable = new JCheckBox("Configurable");
         configurable.setAlignmentX(Component.CENTER_ALIGNMENT);
         configurable.setSelected(exportProperty.isExport());

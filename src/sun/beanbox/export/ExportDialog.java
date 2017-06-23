@@ -17,7 +17,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.File;
 import java.util.List;
 
 /**
@@ -88,7 +87,7 @@ public class ExportDialog extends JDialog {
             DefaultMutableTreeNode second = new DefaultMutableTreeNode(exportBean.getBeanName());
             second.setUserObject(exportBean);
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getDisplayName());
+                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getName());
                 third.setUserObject(node);
                 for (ExportMethod method : node.getMethods()) {
                     DefaultMutableTreeNode fourth = new DefaultMutableTreeNode(method.getName());
@@ -153,7 +152,7 @@ public class ExportDialog extends JDialog {
             DefaultMutableTreeNode second = new DefaultMutableTreeNode(exportBean.getBeanName());
             second.setUserObject(exportBean);
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getDisplayName());
+                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getName());
                 third.setUserObject(node);
                 for (ExportProperty property : node.getProperties()) {
                     DefaultMutableTreeNode fourth = new DefaultMutableTreeNode(property.toString());

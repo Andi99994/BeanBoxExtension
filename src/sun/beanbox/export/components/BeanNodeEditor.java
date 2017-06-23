@@ -19,7 +19,7 @@ public class BeanNodeEditor extends JPanel {
 
         Font plainFont = new Font("Dialog", Font.PLAIN, 12);
         JLabel name = new JLabel("Name: ");
-        JLabel nameText = new JLabel(beanNode.getDisplayName());
+        JLabel nameText = new JLabel(beanNode.getName());
         nameText.setFont(plainFont);
         JLabel directCompositionsLabel = new JLabel("Direct Compositions:");
         JLabel hookupCompositions = new JLabel("Adapter Compositions:");

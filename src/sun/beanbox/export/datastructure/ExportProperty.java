@@ -60,8 +60,20 @@ public class ExportProperty {
         this.defaultValue = defaultValue;
     }
 
+    public Class getPropertyType() {
+        return propertyDescriptor.getPropertyType();
+    }
+
     @Override
     public String toString() {
         return propertyDescriptor.getDisplayName() + " (" + getName() + ")";
+    }
+
+    public String uppercaseFirst() {
+        char c[] = getName().toCharArray();
+        if(Character.isLetter(c[0])) {
+            c[0] = Character.toUpperCase(c[0]);
+        }
+        return new String(c);
     }
 }

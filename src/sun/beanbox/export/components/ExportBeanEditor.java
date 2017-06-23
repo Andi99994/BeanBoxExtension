@@ -17,10 +17,10 @@ public class ExportBeanEditor extends JPanel {
         setLayout(new GridBagLayout());
 
         JLabel name = new JLabel("Name: ");
-        name.setToolTipText("Configure the name of the bean. The name must be a valid Java identifier and must not be a keyword");
-        JLabel nameCheckLabel = new JLabel("Valid name");
+        name.setToolTipText("Configure the name of the bean. The name must be a valid Java identifier and must not be a keyword.");
         TextField nameText = new TextField();
         nameText.setText(exportBean.getBeanName());
+        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidClassName(nameText.getText()) ? "Valid name" : "Invalid name");
         nameText.addTextListener(e -> {
             if (exporter.checkIfValidClassName(nameText.getText())) {
                 exportBean.setBeanName(nameText.getText());
