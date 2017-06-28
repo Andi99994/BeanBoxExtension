@@ -878,6 +878,7 @@ public class BeanBox extends Panel implements Serializable, Runnable,
             fos.close();
             BeanBoxFrame.setClipLabel(wrapper.getBeanLabel());
             BeanBoxFrame.setClipName(wrapper.getBeanName());
+            BeanBoxFrame.setClipJarPath(wrapper.getJarPath());
             // We need to preserve information about whether or not a bean
             // originated from a .ser file across copies and pastes.
             // See paste(), below for more explanation.
@@ -908,6 +909,7 @@ public class BeanBox extends Panel implements Serializable, Runnable,
             MyProducer p = new MyProducer(BeanBoxFrame.getClipFileName());
             String clipName = BeanBoxFrame.getClipName();
             String beanLabel = BeanBoxFrame.getClipLabel();
+            String jarInfo = BeanBoxFrame.getClipJarPath();
 
             // We need to preserve information about whether or not a bean
             // originated from a .ser file across copies and pastes.
@@ -921,7 +923,7 @@ public class BeanBox extends Panel implements Serializable, Runnable,
             boolean fromPrototypeInfo = BeanBoxFrame.getClipFromPrototypeInfo();
 
             Object bean = loader.instantiate(clipName, p);
-            doInsert(bean, beanLabel, clipName, true, fromPrototypeInfo);
+            doInsert(bean, beanLabel, clipName, true, fromPrototypeInfo, jarInfo);
         } catch (Exception ex) {
             error("Paste failed", ex);
             pasteMenuItem.setEnabled(false);
@@ -1474,7 +1476,7 @@ public class BeanBox extends Panel implements Serializable, Runnable,
      */
 
     public void doInsert(Object bean, String beanLabel, String beanName,
-                         boolean useOldClick, boolean fromPrototype) {
+                         boolean useOldClick, boolean fromPrototype, String jarPath) {
         // Change the cursor to indicate an "insert". (We may already
         // have done this, but that's OK.)
 
@@ -1517,7 +1519,7 @@ public class BeanBox extends Panel implements Serializable, Runnable,
         }
 
         // Create a Wrapper for the child
-        Wrapper child = new Wrapper(bean, beanLabel, beanName);
+        Wrapper child = new Wrapper(bean, beanLabel, beanName, jarPath);
 
         // Annotate this wrapper as to whether or not this bean originated
         // from a .ser file.

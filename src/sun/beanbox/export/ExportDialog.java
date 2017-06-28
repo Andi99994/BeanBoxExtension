@@ -18,6 +18,11 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
+import java.util.Observable;
+import java.util.Observer;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Created by Andreas Ertlschweiger on 06.05.2017.
@@ -58,8 +63,36 @@ public class ExportDialog extends JDialog {
                 return;
             }
             try {
-                exporter.export(fd.getDirectory(), fd.getFile());
-                dispose();
+                final Component glassPane = getGlassPane();
+                Thread worker = new Thread(() -> {
+                    SwingUtilities.invokeLater(() -> {
+                        final JPanel panel = new JPanel();
+                        panel.setLayout(new BorderLayout());
+                        panel.add(new JLabel("Generating...", SwingConstants.CENTER), BorderLayout.CENTER);
+                        setGlassPane(panel);
+                        panel.setVisible(true);
+                        panel.setOpaque(false);
+                        for (Component component : getComponents()) {
+                            component.setEnabled(false);
+                        }
+                    });
+                    setEnabled(false);
+                    try {
+                        exporter.export(fd.getDirectory(), fd.getFile());
+                    } catch (Exception e1) {
+                        SwingUtilities.invokeLater(() -> new ErrorDialog(owner, e1.getMessage()));
+                    }
+
+                    SwingUtilities.invokeLater(() -> {
+                        setGlassPane(glassPane);
+                        for (Component component : getComponents()) {
+                            component.setEnabled(false);
+                        }
+                        dispose();
+                    });
+                });
+
+                worker.start();
             } catch (Exception ex) {
                 new ErrorDialog(owner, ex.getMessage());
             }
@@ -182,5 +215,24 @@ public class ExportDialog extends JDialog {
             return;
         }
         panel.setViewportView(new JLabel("Select a node to edit it"));
+    }
+
+    class ProgressDialog extends JDialog implements Observer {
+
+        private JLabel label = new JLabel("Initializing Export...");
+
+        ProgressDialog() {
+            setSize(new Dimension(100,50));
+            setMinimumSize(new Dimension(100, 50));
+            setMaximumSize(new Dimension(100, 50));
+            setLayout(new BorderLayout());
+            add(label, BorderLayout.CENTER);
+        }
+
+        @Override
+        public void update(Observable o, Object arg) {
+            label.setText((String) arg);
+            repaint();
+        }
     }
 }

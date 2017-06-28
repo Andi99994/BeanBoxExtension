@@ -9,8 +9,11 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.xml.soap.Text;
 import java.awt.*;
+import java.beans.PropertyDescriptor;
 import java.beans.PropertyEditor;
+import java.beans.PropertyVetoException;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * Created by Andi on 22.06.2017.
@@ -66,47 +69,23 @@ public class ExportPropertyEditor extends JPanel {
                     exportProperty.setDefaultValue(editor.getValue());
                     propertyEditorComponent.repaintComponent();
                     System.out.println(editor.getValue());
-                    /*for (int i = 0 ; i < editors.length; i++) {
-                        if (editors[i] == editor) {
-                            PropertyDescriptor property1 = properties[i];
-                            Object value = editor.getValue();
-                            values[i] = value;
-                            Method setter = property1.getWriteMethod();
-                            try {
-                                Object args[] = { value };
-                                args[0] = value;
-                                setter.invoke(target, args);
-
-                                // We add the changed property to the targets wrapper
-                                // so that we know precisely what bean properties have
-                                // changed for the target bean and we're able to
-                                // generate initialization statements for only those
-                                // modified properties at code generation time.
-                                targetWrapper.getChangedProperties().addElement(properties[i]);
-
-                            } catch (InvocationTargetException ex) {
-                                if (ex.getTargetException()
-                                        instanceof PropertyVetoException) {
-                                    //warning("Vetoed; reason is: "
-                                    //        + ex.getTargetException().getMessage());
-                                    // temp dealock fix...I need to remove the deadlock.
-                                    System.err.println("WARNING: Vetoed; reason is: "
-                                            + ex.getTargetException().getMessage());
-                                }
-                                else
-                                    error("InvocationTargetException while updating "
-                                            + property1.getName(), ex.getTargetException());
-                            } catch (Exception ex) {
-                                error("Unexpected exception while updating "
-                                        + property1.getName(), ex);
-                            }
-                            if (views[i] != null && views[i] instanceof PropertyCanvas) {
-                                views[i].repaint();
-                            }
-                            break;
+                    PropertyDescriptor property1 = exportProperty.getPropertyDescriptor();
+                    Object value = editor.getValue();
+                    Method setter = property1.getWriteMethod();
+                    try {
+                        Object args[] = { value };
+                        args[0] = value;
+                        setter.invoke(exportProperty.getNode().getData(), args);
+                    } catch (InvocationTargetException ex) {
+                        if (ex.getTargetException() instanceof PropertyVetoException) {
+                            System.err.println("WARNING: Vetoed; reason is: "
+                                    + ex.getTargetException().getMessage());
+                        } else{
+                            //error("InvocationTargetException while updating " + property1.getName(), ex.getTargetException());
                         }
+                    } catch (Exception ex) {
+                        //error("Unexpected exception while updating " + property1.getName(), ex);
                     }
-                }*/
                 }
             });
             propertyEditor = propertyEditorComponent;

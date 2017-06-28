@@ -45,6 +45,7 @@ public class BeanBoxFrame extends Frame implements LayoutManager, Runnable,
     private static String versionID = "BDK1.0 - July 1998";
     private static String clipLabel;
     private static String clipName;
+    private static String clipJarPath;
     private static boolean clipFromPrototypeInfo;
     private static boolean quickStart = false;
     private static boolean defineOnDemand = true;
@@ -152,7 +153,7 @@ public class BeanBoxFrame extends Frame implements LayoutManager, Runnable,
         topBox.setBackground(Color.lightGray);
         topBox.getBeanContextProxy().addPropertyChangeListener("designMode",
                 this);
-        topWrapper = new Wrapper(topBox, "BeanBox", "sun.beanbox.BeanBox");
+        topWrapper = new Wrapper(topBox, "BeanBox", "sun.beanbox.BeanBox", null);
         topWrapper.setBackground(Color.lightGray);
         // add(topWrapper);
         ScrollPane topWrapperScrollPane = new ScrollPane();
@@ -393,6 +394,14 @@ public class BeanBoxFrame extends Frame implements LayoutManager, Runnable,
 
     public static String getClipLabel() {
         return clipLabel;
+    }
+
+    public static String getClipJarPath() {
+        return clipJarPath;
+    }
+
+    public static void setClipJarPath(String path) {
+        clipJarPath = path;
     }
 
     public static boolean getQuickStart() {

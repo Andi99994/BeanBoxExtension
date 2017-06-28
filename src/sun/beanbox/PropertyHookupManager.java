@@ -40,7 +40,7 @@ class PropertyHookupManager {
             hook = new PropertyHookup(source);
             instances.put(source, hook);
             // Register our listener object with the source Wrapper.
-            sourceWrapper.addEventTarget("propertyChange", null, hook);
+            sourceWrapper.addEventTarget("propertyChange", null, hook, null);
         }
 
         sourceWrapper.addPropertyTarget(propertyName, targetObject, setter);

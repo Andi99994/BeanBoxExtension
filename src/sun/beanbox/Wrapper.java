@@ -47,7 +47,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
 
     static final long serialVersionUID = 1144602051002987355L;
 
-    public Wrapper(Object bean, String beanLabel, String beanName) {
+    public Wrapper(Object bean, String beanLabel, String beanName, String jarPath) {
         this.bean = bean;
         if (beanName == null) {
             beanName = bean.getClass().getName();
@@ -58,6 +58,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         this.beanName = beanName;
         this.beanLabel = beanLabel;
         this.isFromPrototype = false;
+        this.jarPath = jarPath;
 
         setLayout(null);
         if (Beans.isInstanceOf(bean, Component.class)) {
@@ -111,9 +112,9 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         // we only care about properties, not method hookups
         for (Enumeration e = wets.elements(); e.hasMoreElements();) {
             WrapperEventTarget wet = (WrapperEventTarget) e.nextElement();
-            if (wet.targetListener instanceof PropertyHookup) {
+            if (wet.getTargetListener() instanceof PropertyHookup) {
 
-                PropertyHookup h = (PropertyHookup) wet.targetListener;
+                PropertyHookup h = (PropertyHookup) wet.getTargetListener();
                 Hashtable table = h.getTargetsByProperty();
                 for (Enumeration keys = table.keys(); keys.hasMoreElements();) {
                     String propertyName = (String) keys.nextElement();
@@ -184,11 +185,11 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         Enumeration e = eventTargets.elements();
         while (e.hasMoreElements()) {
             WrapperEventTarget et = (WrapperEventTarget) e.nextElement();
-            if (et.targetBean == null) {
+            if (et.getTargetBean() == null) {
                 // this is a property bound hookup
             } else {
-                back[i] = new WrapperEventInfo(et.targetBean, et.targetListener
-                        .getClass().getName(), et.eventSetName);
+                back[i] = new WrapperEventInfo(et.getTargetBean(), et.getTargetListener()
+                        .getClass().getName(), et.getEventSetName());
                 i += 1;
             }
         }
@@ -210,13 +211,14 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
     // Add a hookup. All property bound hookups are represented by (at most) one
     // hookup
     synchronized void addEventTarget(String eventSetName,
-                                     Wrapper targetWrapper, Object listener) {
+                                     Wrapper targetWrapper, Object listener, String adapterPath) {
         WrapperEventTarget et = new WrapperEventTarget();
-        et.eventSetName = eventSetName;
+        et.setEventSetName(eventSetName);
+        et.setPath(adapterPath);
         if (targetWrapper != null) {
-            et.targetBean = targetWrapper.getBean();
+            et.setTargetBean(targetWrapper.getBean());
         }
-        et.targetListener = listener;
+        et.setTargetListener(listener);
         eventTargets.addElement(et);
         EventSetDescriptor esd = (EventSetDescriptor) esdMap.get(eventSetName);
         if (esd == null) {
@@ -264,19 +266,19 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
             while (enu.hasMoreElements()) {
                 WrapperEventTarget et = (WrapperEventTarget) enu.nextElement();
                 EventSetDescriptor esd = (EventSetDescriptor) esdMap
-                        .get(et.eventSetName);
+                        .get(et.getEventSetName());
                 Method remover = esd.getRemoveListenerMethod();
                 try {
-                    Object args[] = { et.targetListener };
+                    Object args[] = { et.getTargetListener() };
                     remover.invoke(bean, args);
                 } catch (InvocationTargetException ex) {
                     System.err.println("Wrapper: removing event listener for "
-                            + et.eventSetName + " failed:");
+                            + et.getEventSetName() + " failed:");
                     System.err.println("    " + ex.getTargetException());
                     ex.getTargetException().printStackTrace();
                 } catch (Exception ex) {
                     System.err.println("Wrapper: removing event listener for "
-                            + et.eventSetName + " failed:");
+                            + et.getEventSetName() + " failed:");
                     System.err.println("    " + ex);
                     ex.printStackTrace();
                 }
@@ -357,20 +359,20 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         while (enu.hasMoreElements()) {
             WrapperEventTarget et = (WrapperEventTarget) enu.nextElement();
             EventSetDescriptor esd = (EventSetDescriptor) esdMap
-                    .get(et.eventSetName);
+                    .get(et.getEventSetName());
             Method adder = esd.getAddListenerMethod();
             try {
-                Object args[] = { et.targetListener };
+                Object args[] = { et.getTargetListener() };
                 adder.invoke(bean, args);
             } catch (InvocationTargetException ex) {
                 System.err.println("Wrapper: adding event listener for "
-                        + et.eventSetName + " failed:");
+                        + et.getEventSetName() + " failed:");
                 System.err.println("    bean = " + bean);
                 System.err.println("    " + ex.getTargetException());
                 ex.getTargetException().printStackTrace();
             } catch (Exception ex) {
                 System.err.println("Wrapper: adding event listener for "
-                        + et.eventSetName + " failed:");
+                        + et.getEventSetName() + " failed:");
                 System.err.println("    bean = " + bean);
                 System.err.println("    " + ex);
                 ex.printStackTrace();
@@ -1046,8 +1048,8 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         }
         for (Object eventTarget : eventTargets) {
             WrapperEventTarget target = (WrapperEventTarget) eventTarget;
-            if (target.targetBean != null) {
-                listeners.add(target.targetBean);
+            if (target.getTargetBean() != null) {
+                listeners.add(target.getTargetBean());
             }
         }
         for (Object propertyTarget : propertyTargets) {
@@ -1059,31 +1061,35 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         return listeners;
     }
 
+    // ----------------------------------------------------------------------
     //Andreas Ertlschweiger 2017
-    public List<Object> getDirectTargets() {
-        List<Object> listeners = new ArrayList<>();
-        for (Vector vector : listenerBeans.values()){
-            Enumeration elements = vector.elements();
+    public List<WrapperEventTarget> getDirectTargets() {
+        List<WrapperEventTarget> listeners = new ArrayList<>();
+        for (Map.Entry<String, Vector> entry : listenerBeans.entrySet()){
+            Enumeration elements = entry.getValue().elements();
             while (elements.hasMoreElements()) {
-                listeners.add(elements.nextElement());
+                Object target = elements.nextElement();
+                WrapperEventTarget eventTarget = new WrapperEventTarget();
+                eventTarget.setEventSetName(entry.getKey());
+                eventTarget.setTargetBean(target);
+                eventTarget.setTargetListener(target);
+                listeners.add(eventTarget);
             }
         }
         return listeners;
     }
 
-    //Andreas Ertlschweiger 2017
-    public List<Object> getEventHookupTargets() {
-        List<Object> listeners = new ArrayList<>();
+    public List<WrapperEventTarget> getEventHookupTargets() {
+        List<WrapperEventTarget> listeners = new ArrayList<>();
         for (Object eventTarget : eventTargets) {
             WrapperEventTarget target = (WrapperEventTarget) eventTarget;
-            if (target.targetBean != null) {
-                listeners.add(target.targetBean);
+            if (target.getTargetBean() != null) {
+                listeners.add(target);
             }
         }
         return listeners;
     }
 
-    //Andreas Ertlschweiger 2017
     public List<Object> getPropertyTargets() {
         List<Object> listeners = new ArrayList<>();
         for (Object propertyTarget : propertyTargets) {
@@ -1095,17 +1101,15 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         return listeners;
     }
 
+    private String jarPath;
+
+    public String getJarPath() {
+        return jarPath;
+    }
+
+    //Andreas Ertlschweiger 2017: Moved class WrapperEventTarget to WrapperEventTarget.java
+    //Andreas Ertlschweiger 2017
     // ----------------------------------------------------------------------
 
 }
 
-// Class to hold state on event listener hookup for which this
-// Wrapper's bean is a source.
-
-class WrapperEventTarget implements Serializable {
-    static final long serialVersionUID = 4831901854891942741L;
-
-    String eventSetName;
-    Object targetBean;
-    Object targetListener;
-}

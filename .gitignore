@@ -4,3 +4,5 @@ out/
 TestBeans/TestBeans.iml
 BeanBox.iml
 tmp/
+ExportBean.jar
+tmp*

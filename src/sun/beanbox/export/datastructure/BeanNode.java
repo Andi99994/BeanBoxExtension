@@ -1,5 +1,7 @@
 package sun.beanbox.export.datastructure;
 
+import sun.beanbox.JarInfo;
+
 import java.beans.IntrospectionException;
 import java.util.LinkedList;
 import java.util.List;
@@ -16,6 +18,7 @@ public class BeanNode {
     private List<ExportProperty> properties = new LinkedList<>();
     private List<ExportMethod> methods = new LinkedList<>();
     private boolean registerInManifest = false;
+    private String jarPath;
 
     public BeanNode(Object data, String displayName) throws IntrospectionException {
         this.name = displayName;
@@ -84,5 +87,13 @@ public class BeanNode {
             c[0] = Character.toLowerCase(c[0]);
         }
         return new String(c);
+    }
+
+    public String getJarPath() {
+        return jarPath;
+    }
+
+    public void setJarPath(String jarPath) {
+        this.jarPath = jarPath;
     }
 }

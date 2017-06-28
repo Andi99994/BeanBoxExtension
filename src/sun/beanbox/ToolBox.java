@@ -238,6 +238,7 @@ class ToolBoxPanel extends Panel implements Runnable, MouseListener {
             Object bean;
             String beanLabel;
             String beanName;
+            String beanJarPath;
             boolean fromPrototypeInfo = false;
 
             synchronized (this) {
@@ -253,6 +254,7 @@ class ToolBoxPanel extends Panel implements Runnable, MouseListener {
                 beanLabel = pendingBeanLabel;
                 beanName = pendingBeanName;
                 fromPrototypeInfo = pendingFromPrototypeInfo;
+                beanJarPath = pendingJarInfo;
             }
 
             // Figure our the current BeanBox.
@@ -262,7 +264,7 @@ class ToolBoxPanel extends Panel implements Runnable, MouseListener {
             frame.setCursor(crosshairCursor);
 
             // do the insertion.
-            box.doInsert(bean, beanLabel, beanName, false, fromPrototypeInfo);
+            box.doInsert(bean, beanLabel, beanName, false, fromPrototypeInfo, beanJarPath);
 
             // Clear any pending bean.  This will normally be the bean we
             // just inserted, but we also want to clear any bogus insert
@@ -334,10 +336,11 @@ class ToolBoxPanel extends Panel implements Runnable, MouseListener {
         boolean fromPrototypeInfo = false;
         String beanName = (String) beanNames.elementAt(row);
         String beanLabel = (String) beanLabels.elementAt(row);
+        JarInfo ji = null;
         if (beanName.equals("sun.beanbox.BeanBox")) {
             bean = new BeanBox();
         } else {
-            JarInfo ji = (JarInfo) beanJars.elementAt(row);
+            ji = (JarInfo) beanJars.elementAt(row);
             try {
                 bean = ji.getInstance(beanName);
                 fromPrototypeInfo = ji.isFromPrototype(beanName);
@@ -353,6 +356,9 @@ class ToolBoxPanel extends Panel implements Runnable, MouseListener {
             pendingBeanLabel = beanLabel;
             pendingBeanName = beanName;
             pendingFromPrototypeInfo = fromPrototypeInfo;
+            if(ji != null) {
+                pendingJarInfo = ji.getJarName();
+            }
             notifyAll();
         }
     }
@@ -410,6 +416,7 @@ class ToolBoxPanel extends Panel implements Runnable, MouseListener {
     private String pendingBeanLabel;
     private String pendingBeanName;
     private boolean pendingFromPrototypeInfo;
+    private String pendingJarInfo;
     private Frame frame;
 
     private static Cursor crosshairCursor = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);

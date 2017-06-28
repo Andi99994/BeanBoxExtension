@@ -29,7 +29,8 @@ public class HookupManager {
             Object target = targetWrapper.getBean();
             //Generate hookup or direct
             if(useEventAdapter) {
-                String hookupName = generateHookup(esd, listenerMethod, source, target, targetMethod);
+                Vector hookupInfo = generateHookup(esd, listenerMethod, source, target, targetMethod);
+                String hookupName = (String) hookupInfo.get(0);
 
                 if (hookupName == null) {
                     // The compile failed.
@@ -48,7 +49,7 @@ public class HookupManager {
                 args[0] = target;
                 setTargetMethod.invoke(hookup, args);
 
-                sourceWrapper.addEventTarget(esd.getName(), targetWrapper, hookup);
+                sourceWrapper.addEventTarget(esd.getName(), targetWrapper, hookup, (String) hookupInfo.get(1));
             } else {
                 //Directly connect source with target
                 Method addListenerMethod = esd.getAddListenerMethod();
@@ -75,7 +76,7 @@ public class HookupManager {
         return back;
     }
 
-    static String generateHookup(EventSetDescriptor esd, Method listenerMethod, Object source,
+    static Vector generateHookup(EventSetDescriptor esd, Method listenerMethod, Object source,
                                  Object target, Method targetMethod) {
 
         String id = getId();
@@ -87,6 +88,7 @@ public class HookupManager {
         // Create an appropriate subdirectory.
         java.io.File tmp = new java.io.File(tmpDir);
         tmp.mkdirs();
+        java.io.File hookup = new java.io.File(fileName);
 
         // Open the new java source file,
         java.io.PrintWriter out = null;
@@ -198,7 +200,10 @@ public class HookupManager {
 
         String fullClassName = packageName+"."+className;
         String pathToFile = tmpDir+java.io.File.separatorChar+className+".class";
-        return pathToFile;
+        Vector result = new Vector();
+        result.add(pathToFile);
+        result.add(hookup.getAbsolutePath());
+        return result;
     }
 
     /**
