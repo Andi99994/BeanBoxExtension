@@ -9,6 +9,7 @@ import java.io.File;
  * Created by hellr on 11/22/2016.
  */
 public class FilenameEditor extends JPanel implements PropertyEditor {
+
     private String _path;
     private JFileChooser _chooser;
     private Label _lblPath;

@@ -62,11 +62,11 @@ public class PropertyDisplayCanvas extends Canvas {
     @Override
     public void paint(Graphics g) {
         super.paint(g);
-        if (editor.isPaintable() && editor.supportsCustomEditor()) {
+        if (editor != null && editor.isPaintable() && editor.supportsCustomEditor()) {
             Rectangle box = new Rectangle(0, 0, getSize().width, getSize().height);
             editor.paintValue(g, box);
             return;
-        } else if (editor.getAsText() != null){
+        } else if (editor != null && editor.getAsText() != null){
             String value = editor.getAsText();
             FontMetrics metrics = g.getFontMetrics(g.getFont());
             int x = (getSize().width - metrics.stringWidth(value)) / 2;

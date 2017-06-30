@@ -407,10 +407,10 @@ public class Exporter {
         for (BeanNode node : exportBean.getBeans().getAllNodes()) {
             writer.println("private " + node.getData().getClass().getCanonicalName() + " " + node.lowercaseFirst() + ";");
         }
-        writer.println();
+        /*writer.println();
         for (ExportProperty exportProperty : exportProperties) {
             writer.println("private " + exportProperty.getPropertyType().getCanonicalName() + " " + exportProperty.getName() + ";");
-        }
+        }*/
         //TODO: PropertyChange & Veto Support
         writer.println();
         writer.println("    public " + exportBean.getBeanName() + "() {");
@@ -438,7 +438,7 @@ public class Exporter {
         writer.println();
         for (ExportProperty property : sortPropertiesByBinding(exportProperties.stream().filter(ExportProperty::isSetDefaultValue).collect(Collectors.toList()))) { //TODO: add veto support
             Object value = property.getPropertyDescriptor().getReadMethod().invoke(property.getNode().getData());
-            if (property.getPropertyType().isPrimitive() || value == null || value instanceof String) {
+            if (value == null || value instanceof Void || isPrimitiveOrPrimitiveWrapperOrString(value.getClass())) {
                 writer.println("        " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
                         + "(" + convertPrimitive(value) + ");");
             } else {
@@ -455,8 +455,7 @@ public class Exporter {
                     writer.println("        } catch (java.io.IOException | java.lang.ClassNotFoundException e) {");
                     writer.println("            e.printStackTrace();");
                     writer.println("        }");
-                }catch(IOException i) {
-                    i.printStackTrace();
+                } catch(IOException i) {
                     throw new IOException("Error serializing property: " + property.getNode().getName() + ":" + property.getName());
                 }
             }
@@ -469,12 +468,20 @@ public class Exporter {
             writer.println("        return " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getReadMethod().getName() + "();");
             writer.println("    }");
             writer.println();
-            writer.println("    public void set" + property.uppercaseFirst() + "(" + property.getPropertyType().getCanonicalName() + " value) {");
+            StringBuilder exceptions = new StringBuilder("");
+            Class<?>[] types = property.getPropertyDescriptor().getWriteMethod().getExceptionTypes();
+            for (int i = 0; i < types.length; i++) {
+                if (i == 0) {
+                    exceptions.append("throws ").append(types[i].getCanonicalName());
+                } else {
+                    exceptions.append(",").append(types[i].getCanonicalName());
+                }
+            }
+            writer.println("    public void set" + property.uppercaseFirst() + "(" + property.getPropertyType().getCanonicalName() + " value) " + exceptions + " {");
             writer.println("        " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName() + "(value);");
             writer.println("    }");
             writer.println();
         }
-        //TODO:print property setter
         writer.println();
         //TODO: print input & output interface
         writer.println("}");
@@ -571,7 +578,7 @@ public class Exporter {
     }
 
     private String convertPrimitive(Object object) {
-        if (object == null) return null;
+        if (object == null || object instanceof Void) return null;
         if (object instanceof Character) {
             return "'" + object.toString() + "'";
         } else if (object instanceof Float) {
@@ -580,8 +587,17 @@ public class Exporter {
             return object.toString() + "L";
         } else if (object instanceof String) {
             return "\"" + object.toString() + "\"";
+        } else if (object instanceof Short) {
+            return "(short) " + object.toString();
         }
         return object.toString();
+    }
+
+    public static boolean isPrimitiveOrPrimitiveWrapperOrString(Class<?> type) {
+        return (type.isPrimitive() && type != void.class) ||
+                type == Double.class || type == Float.class || type == Long.class ||
+                type == Integer.class || type == Short.class || type == Character.class ||
+                type == Byte.class || type == Boolean.class || type == String.class;
     }
 
     private boolean validateConfiguration() {
