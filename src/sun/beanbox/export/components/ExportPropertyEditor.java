@@ -42,15 +42,21 @@ public class ExportPropertyEditor extends JPanel {
         JLabel currentValue = new JLabel("Current value:");
         currentValue.setAlignmentX(Component.CENTER_ALIGNMENT);
         currentValue.setToolTipText("The currently configured value");
-        JLabel defaultValue = new JLabel("Default value:");
+        /*JLabel defaultValue = new JLabel("Default value:");
         defaultValue.setAlignmentX(Component.CENTER_ALIGNMENT);
         defaultValue.setToolTipText("Configure a default value to be set after exporting. Be aware of any property bindings or property veto listeners!" +
-                "Any complex types must be serializable.");
+                "Any complex types must be serializable.");*/
         JCheckBox configurable = new JCheckBox("Configurable");
         configurable.setAlignmentX(Component.CENTER_ALIGNMENT);
         configurable.setSelected(exportProperty.isExport());
         configurable.addActionListener(e -> exportProperty.setExport(configurable.isSelected()));
         configurable.setToolTipText("Select whether the property should still be configurable after export");
+        JCheckBox setDefaults = new JCheckBox("Set Default value");
+        setDefaults.setAlignmentX(Component.CENTER_ALIGNMENT);
+        setDefaults.setSelected(exportProperty.isSetDefaultValue());
+        setDefaults.addActionListener(e -> exportProperty.setSetDefaultValue(setDefaults.isSelected()));
+        setDefaults.setToolTipText("Select whether the current value should be set as a default value on Bean instantiation. " +
+                "Complex types have to be serialized which can lead to performance issues if you are not careful!");
 
         Component propertyDisplay;
         try {
@@ -58,7 +64,7 @@ public class ExportPropertyEditor extends JPanel {
         } catch (InvocationTargetException | IllegalAccessException e) {
             propertyDisplay = new JLabel("Could not load editor or value");
         }
-
+        /*
         Component propertyEditor;
         try {
             PropertyEditorComponent propertyEditorComponent = new PropertyEditorComponent(154, 54, exportProperty, PropertyValueType.DEFAULT_VALUE, owner);
@@ -92,7 +98,7 @@ public class ExportPropertyEditor extends JPanel {
         } catch (InvocationTargetException | IllegalAccessException e) {
             propertyEditor = new JLabel("Could not load editor or value");
         }
-
+        */
         GridBagConstraints c = new GridBagConstraints();
         c.weightx = 20;
         add(name, c);
@@ -106,14 +112,16 @@ public class ExportPropertyEditor extends JPanel {
         add(currentValue, c);
         c.gridx = 1;
         add(propertyDisplay, c);
-        c.gridy = 3;
+        /*c.gridy = 3;
         c.gridx = 0;
         add(defaultValue, c);
         c.gridx = 1;
-        add(propertyEditor, c);
-        c.gridy = 4;
+        add(propertyEditor, c);*/
+        c.gridy = 3;
         c.gridx = 0;
         c.gridwidth = 2;
+        add(setDefaults, c);
+        c.gridy = 4;
         add(configurable, c);
     }
 }

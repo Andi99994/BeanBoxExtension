@@ -13,6 +13,7 @@ public class ExportProperty {
     private BeanNode node;
     private Object defaultValue;
     private String name;
+    private boolean setDefaultValue = false;
 
     public ExportProperty(PropertyDescriptor propertyDescriptor, BeanNode node) throws InvocationTargetException, IllegalAccessException {
         this.propertyDescriptor = propertyDescriptor;
@@ -75,5 +76,13 @@ public class ExportProperty {
             c[0] = Character.toUpperCase(c[0]);
         }
         return new String(c);
+    }
+
+    public boolean isSetDefaultValue() {
+        return setDefaultValue;
+    }
+
+    public void setSetDefaultValue(boolean setDefaultValue) {
+        this.setDefaultValue = setDefaultValue;
     }
 }

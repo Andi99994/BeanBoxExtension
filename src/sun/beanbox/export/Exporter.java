@@ -18,6 +18,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 
 /**
@@ -30,7 +31,7 @@ public class Exporter {
 
     private String tmpDirectoryName = "/tmp";
     private static final String DEFAULT_BEAN_PACKAGE_NAME = "beanBox/generated/beans";
-    private static final String DEFAULT_SERIALIZED_PROPERTIES_PACKAGE_NAME = "beanBox/generated/properties";
+    private static final String DEFAULT_SERIALIZED_PROPERTIES_PACKAGE_NAME = "beanBox/generated/beans/properties";
     private static final String DEFAULT_ADAPTER_PACKAGE_NAME = "beanBox/generated/adapters";
 
     private static final String DEFAULT_BEAN_NAME = "ExportBean";
@@ -98,7 +99,11 @@ public class Exporter {
         BeanInfo beanInfo = Introspector.getBeanInfo(beanNode.getData().getClass());
         for (PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
             if (!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
-                beanNode.getProperties().add(new ExportProperty(propertyDescriptor, beanNode));
+                ExportProperty property = new ExportProperty(propertyDescriptor, beanNode);
+                if(wrapper.getChangedProperties().contains(propertyDescriptor)) {
+                    property.setSetDefaultValue(true);
+                }
+                beanNode.getProperties().add(property);
             }
         }
         for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
@@ -214,14 +219,13 @@ public class Exporter {
                 File tmpAdapterDirectory = new File(tmpDirectory.getAbsolutePath() + "/" + DEFAULT_ADAPTER_PACKAGE_NAME);
                 if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
                     ArrayList<File> resources = collectResources();
-                    copyAndExtractResources(tmpDirectory, resources); //TODO: save moved resources
+                    copyAndExtractResources(tmpDirectory, resources);
                     for (ExportBean exportBean : exportBeans) {
-                        generateBean(tmpBeanDirectory, tmpPropertiesDirectory, tmpAdapterDirectory, exportBean);
+                        generateBean(tmpDirectory, tmpBeanDirectory, tmpPropertiesDirectory, tmpAdapterDirectory, exportBean);
                     }
                     generateManifest(tmpManifestDirectory);
                     compileSources(tmpBeanDirectory, resources);
-                    resources.add(tmpDirectory);
-                    packJar(target, tmpDirectory.getAbsolutePath(), resources);
+                    packJar(target, tmpDirectory);
                 } else {
                     throw new IOException("Error creating temporary directories at: " + directory);
                 }
@@ -234,15 +238,15 @@ public class Exporter {
 
     private void copyAndExtractResources(File tmpDirectory, Collection<File> resources) throws IOException {
         for (File resource : resources) {
-            if(resource.getName().toLowerCase().endsWith(".jar")) {
+            if (resource.getName().toLowerCase().endsWith(".jar")) {
                 JarFile jarfile = new JarFile(resource);
                 Enumeration<JarEntry> enu = jarfile.entries();
                 while (enu.hasMoreElements()) {
                     JarEntry je = enu.nextElement();
-                    File fl = new File(tmpDirectoryName, je.getName());
+                    File fl = new File(tmpDirectory.getAbsolutePath(), je.getName());
                     if (!fl.exists()) {
                         fl.getParentFile().mkdirs();
-                        fl = new File(tmpDirectoryName, je.getName());
+                        fl = new File(tmpDirectory.getAbsolutePath(), je.getName());
                     }
                     if (je.isDirectory() || je.getName().toUpperCase().contains("MANIFEST.MF")) {
                         continue;
@@ -256,26 +260,31 @@ public class Exporter {
                     is.close();
                 }
             } else {
-                //TODO: write files recursively
+                try (
+                        InputStream in = new FileInputStream(resource);
+                        OutputStream out = new FileOutputStream(new File(tmpDirectory.getAbsolutePath(), resource.getName()))
+                ) {
+                    byte[] buf = new byte[1024];
+                    int length;
+                    while ((length = in.read(buf)) > 0) {
+                        out.write(buf, 0, length);
+                    }
+                }
             }
         }
 
 
     }
 
-    private void packJar(File target, String base, Collection<File> resources) throws IOException {
+    private void packJar(File target, File root) throws IOException {
         JarOutputStream jarOut = new JarOutputStream(new FileOutputStream(target));
-        for (File resource : resources) {
-            writeRecursively(jarOut, base, resource);
-        }
+        writeRecursively(jarOut, root.getAbsolutePath() + "\\", root);
         jarOut.close();
     }
 
     private void writeRecursively(JarOutputStream jarOut, String base, File resource) throws IOException {
         if (resource.isFile()) {
-            System.out.println(resource.getAbsolutePath());
-            if (resource.getName().toUpperCase().contains("MANIFEST.MF")) return;
-            String relativePath = resource.getAbsolutePath().split(Pattern.quote(base))[0];
+            String relativePath = getRelativePath(base, resource, true);
             jarOut.putNextEntry(new ZipEntry(relativePath));
             InputStream is = new FileInputStream(resource);
             while (is.available() > 0) {
@@ -299,7 +308,8 @@ public class Exporter {
             classpath.append(resource.getAbsolutePath()).append(";");
         }
         Iterable<String> options = Arrays.asList("-classpath", classpath.toString());
-        Iterable<? extends JavaFileObject> files = fileManager.getJavaFileObjectsFromFiles(Arrays.asList(folder.listFiles()));
+        List<File> compilationFiles = Arrays.stream(folder.listFiles()).filter(file -> file.isFile() && file.getName().endsWith(".java")).collect(Collectors.toList());
+        Iterable<? extends JavaFileObject> files = fileManager.getJavaFileObjectsFromFiles(compilationFiles);
         compiler.getTask(null, fileManager, null, options, null, files).call();
     }
 
@@ -355,7 +365,7 @@ public class Exporter {
         }
     }
 
-    private void generateBean(File beanDirectory, File propertyDirectory, File adapterDirectory, ExportBean exportBean) throws IOException {
+    private void generateBean(File root, File beanDirectory, File propertyDirectory, File adapterDirectory, ExportBean exportBean) throws IOException, InvocationTargetException, IllegalAccessException {
         List<ExportProperty> exportProperties = exportBean.getProperties();
 
         File bean = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java");
@@ -366,7 +376,7 @@ public class Exporter {
         writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
         writer.println();
         Set<String> imports = new HashSet<>();
-        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+        /*for (BeanNode node : exportBean.getBeans().getAllNodes()) {
             String nextImport = node.getData().getClass().getCanonicalName();
             if (!imports.contains(nextImport)) {
                 writer.println("import " + nextImport + ";");
@@ -379,9 +389,9 @@ public class Exporter {
                     imports.add(nextAdapterImport);
                 }
             }
-        }
+        }*/
         writer.println();
-        for (ExportProperty exportProperty : exportProperties) {
+        /*for (ExportProperty exportProperty : exportProperties) {
             if (!exportProperty.getPropertyType().isPrimitive()) {
                 String nextImport = exportProperty.getPropertyType().getCanonicalName();
                 if (!imports.contains(nextImport)) {
@@ -389,9 +399,8 @@ public class Exporter {
                     imports.add(nextImport);
                 }
             }
-        }
+        }*/
         writer.println("import java.io.Serializable;");
-        //TODO: print imports
         writer.println();
         writer.println("public class " + exportBean.getBeanName() + " implements Serializable {");
         writer.println();
@@ -422,12 +431,37 @@ public class Exporter {
                 writer.println("        " + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(" + edge.getEnd().lowercaseFirst() + ");");
             }
             for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
-                writer.println("Property Binding: " + edge.getEnd().getData().getClass().getCanonicalName());
+                //writer.println("Property Binding: " + edge.getEnd().getData().getClass().getCanonicalName());
                 //TODO
             }
         }
         writer.println();
-        //TODO:initialize defaults
+        for (ExportProperty property : sortPropertiesByBinding(exportProperties.stream().filter(ExportProperty::isSetDefaultValue).collect(Collectors.toList()))) { //TODO: add veto support
+            Object value = property.getPropertyDescriptor().getReadMethod().invoke(property.getNode().getData());
+            if (property.getPropertyType().isPrimitive() || value == null || value instanceof String) {
+                writer.println("        " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
+                        + "(" + convertPrimitive(value) + ");");
+            } else {
+                File ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
+                while (ser.exists()) {
+                    ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
+                }
+                ser.getParentFile().mkdirs();
+                try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))){
+                    out.writeObject(value);
+                    writer.println("        try (java.io.ObjectInputStream in = new java.io.ObjectInputStream(getClass().getResourceAsStream(\"" + getRelativePath(beanDirectory.getAbsolutePath(), ser, false) + "\"))){");
+                    writer.println("            " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
+                            + "((" + property.getPropertyType().getCanonicalName() + ") in.readObject());");
+                    writer.println("        } catch (java.io.IOException | java.lang.ClassNotFoundException e) {");
+                    writer.println("            e.printStackTrace();");
+                    writer.println("        }");
+                }catch(IOException i) {
+                    i.printStackTrace();
+                    throw new IOException("Error serializing property: " + property.getNode().getName() + ":" + property.getName());
+                }
+            }
+        }
+        //TODO: sort order to recognise property bindings
         writer.println("    }");
         writer.println();
         for (ExportProperty property : exportProperties) {
@@ -453,14 +487,12 @@ public class Exporter {
         writer = new PrintWriter(new FileWriter(beanInfo));
         writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
         writer.println();
-        //TODO: print imports
-        writer.println();
         writer.println("import java.beans.*;");
         writer.println("import java.io.Serializable;");
         writer.println();
         writer.println("public class " + exportBean.getBeanName() + "BeanInfo extends SimpleBeanInfo implements Serializable {");
         writer.println();
-        if(!exportProperties.isEmpty()) {
+        if (!exportProperties.isEmpty()) {
             writer.println("    @Override");
             writer.println("    public PropertyDescriptor[] getPropertyDescriptors() {");
             writer.println("        try {");
@@ -518,8 +550,46 @@ public class Exporter {
         }
     }
 
+    private List<ExportProperty> sortPropertiesByBinding(List<ExportProperty> properties){
+        //TODO: think
+        return properties;
+    }
+
+    private String generateSerName(Object type) {
+        Random rand = new Random();
+        int random = 100000000 + rand.nextInt(900000000);
+        return type.getClass().getSimpleName().toLowerCase() + "_" + random;
+    }
+
+    private String getRelativePath(String base, File file, boolean leadingSlash) {
+        String[] split = file.getAbsolutePath().split(Pattern.quote(base));
+        String relativePath = split.length > 1 ? split[1] : split[0];
+        if(relativePath != null && relativePath.length() > 2 && !leadingSlash) {
+            relativePath = relativePath.substring(1, relativePath.length());
+        }
+        return relativePath.replace('\\', '/');
+    }
+
+    private String convertPrimitive(Object object) {
+        if (object == null) return null;
+        if (object instanceof Character) {
+            return "'" + object.toString() + "'";
+        } else if (object instanceof Float) {
+            return object.toString() + "f";
+        } else if (object instanceof Long) {
+            return object.toString() + "L";
+        } else if (object instanceof String) {
+            return "\"" + object.toString() + "\"";
+        }
+        return object.toString();
+    }
+
     private boolean validateConfiguration() {
+        //TODO: Validate Unique property naming within ExportBean
+        //TODO: Validate Unique Export bean naming, may not have the same name as another Bean in the generated JAR
+        //TODO: Validate resource conflicts
+        //TODO: Validate unique naming for all methods (input output interface)
+        //TODO: Validate input output interface
         return true;
-        //TODO
     }
 }
