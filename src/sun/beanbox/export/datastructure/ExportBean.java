@@ -46,6 +46,30 @@ public class ExportBean {
         return exportProperties;
     }
 
+    public List<ExportMethod> getMethods() {
+        List<ExportMethod> exportMethods = new ArrayList<>();
+        for (BeanNode node : beans.getInputNodes()) {
+            for(ExportMethod method : node.getMethods()) {
+                if (method.isInclude()) {
+                    exportMethods.add(method);
+                }
+            }
+        }
+        return exportMethods;
+    }
+
+    public List<ExportEvent> getEvents() {
+        List<ExportEvent> exportEvents = new ArrayList<>();
+        for (BeanNode node : beans.getOutputNodes()) {
+            for(ExportEvent event : node.getEvents()) {
+                if (event.isInclude()) {
+                    exportEvents.add(event);
+                }
+            }
+        }
+        return exportEvents;
+    }
+
     @Override
     public String toString() {
         return beanName;

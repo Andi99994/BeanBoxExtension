@@ -1,36 +1,36 @@
 package sun.beanbox.export.datastructure;
 
-import java.beans.MethodDescriptor;
+import java.beans.EventSetDescriptor;
 
 /**
- * Created by Andi on 26.05.2017.
+ * Created by Andi on 03.07.2017.
  */
-public class ExportMethod {
+public class ExportEvent {
 
-    private MethodDescriptor methodDescriptor;
-    private BeanNode node;
+    private EventSetDescriptor eventSetDescriptor;
+    private BeanNode beanNode;
     private String name;
     private boolean include = true;
 
-    public ExportMethod(MethodDescriptor methodDescriptor, BeanNode node) {
-        this.methodDescriptor = methodDescriptor;
-        this.node = node;
+    public ExportEvent(EventSetDescriptor eventSetDescriptor, BeanNode beanNode) {
+        this.eventSetDescriptor = eventSetDescriptor;
+        this.beanNode = beanNode;
     }
 
     public String getName() {
         if(name == null || name.isEmpty()) {
-            return methodDescriptor.getName();
+            return eventSetDescriptor.getName();
         } else {
             return name;
         }
     }
 
-    public MethodDescriptor getMethodDescriptor() {
-        return methodDescriptor;
+    public BeanNode getBeanNode() {
+        return beanNode;
     }
 
-    public BeanNode getNode() {
-        return node;
+    public EventSetDescriptor getEventSetDescriptor() {
+        return eventSetDescriptor;
     }
 
     @Override

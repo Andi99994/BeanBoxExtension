@@ -13,7 +13,13 @@ public class BeanGraph {
 
     public BeanGraph(Collection<BeanNode> inputNodes, Collection<BeanNode> outputNodes, Collection<BeanNode> allNodes){
         this.inputNodes.addAll(inputNodes);
+        for(BeanNode node : inputNodes) {
+            node.setInputInterface(true);
+        }
         this.outputNodes.addAll(outputNodes);
+        for(BeanNode node : outputNodes) {
+            node.setOutputInterface(true);
+        }
         this.allNodes.addAll(allNodes);
         Set<String> beanNames = new HashSet<>();
         for (BeanNode node : allNodes) {

@@ -28,23 +28,10 @@ public class CompositionBean implements ImageProcessListener, Serializable {
         roiBean.removeImageProcessListener(listener);
     }
 
-    protected ArrayList<ImageProcessListener> getListeners() {
-        return roiBean.getListeners();
+    protected ArrayList<ImageProcessListener> getImageProcessListeners() {
+        return roiBean.getImageProcessListeners();
     }
 
-    protected void notifyImageProcessListeners(PlanarImage image) {
-        ArrayList<ImageProcessListener> listens;
-
-        synchronized (this) {
-            listens = (ArrayList<ImageProcessListener>) getListeners().clone();
-        }
-
-        for (ImageProcessListener listener : listens) {
-            listener.process(new ImageProcessEvent(this, image));
-        }
-    }
-
-    @Override
     public void process(ImageProcessEvent event) {
         imageReadBean.process(event);
     }

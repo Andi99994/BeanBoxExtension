@@ -25,11 +25,22 @@ public class BeanNodeEditor extends JPanel {
         JLabel hookupCompositions = new JLabel("Adapter Compositions:");
         JLabel propertyBindings = new JLabel("Property Bindings:");
         JCheckBox manifest = new JCheckBox("Include in manifest");
-        manifest.setFont(plainFont);
         manifest.setAlignmentX(Component.CENTER_ALIGNMENT);
         manifest.setSelected(beanNode.isRegisterInManifest());
         manifest.addActionListener(e -> beanNode.setRegisterInManifest(manifest.isSelected()));
         manifest.setToolTipText("Select whether the bean should still be visible as a bean after export by registering it in the manifest");
+
+        JCheckBox input = new JCheckBox("Input interface");
+        input.setAlignmentX(Component.CENTER_ALIGNMENT);
+        input.setSelected(beanNode.isInputInterface());
+        input.addActionListener(e -> beanNode.setInputInterface(input.isSelected()));
+        input.setToolTipText("Select whether the bean should be part of the input interface.");
+
+        JCheckBox output = new JCheckBox("Output interface");
+        output.setAlignmentX(Component.CENTER_ALIGNMENT);
+        output.setSelected(beanNode.isOutputInterface());
+        output.addActionListener(e -> beanNode.setOutputInterface(output.isSelected()));
+        output.setToolTipText("Select whether the bean should be part of the output interface.");
 
         GridBagConstraints c = new GridBagConstraints();
         Insets topPadding = new Insets(15,0,0,0);
@@ -44,6 +55,10 @@ public class BeanNodeEditor extends JPanel {
         c.gridwidth = 2;
         c.insets = topPadding;
         add(manifest, c);
+        c.gridy = 2;
+        add(input, c);
+        c.gridy = 3;
+        add(output, c);
         List<DirectCompositionEdge> directCompositions = beanNode.getDirectCompositionEdges();
         if(directCompositions != null && directCompositions.size() > 0) {
             ++c.gridy;

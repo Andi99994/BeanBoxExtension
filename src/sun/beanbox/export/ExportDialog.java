@@ -1,13 +1,8 @@
 package sun.beanbox.export;
 
 import sun.beanbox.ErrorDialog;
-import sun.beanbox.export.components.BeanNodeEditor;
-import sun.beanbox.export.components.ExportBeanEditor;
-import sun.beanbox.export.components.ExportPropertyEditor;
-import sun.beanbox.export.datastructure.BeanNode;
-import sun.beanbox.export.datastructure.ExportBean;
-import sun.beanbox.export.datastructure.ExportMethod;
-import sun.beanbox.export.datastructure.ExportProperty;
+import sun.beanbox.export.components.*;
+import sun.beanbox.export.datastructure.*;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -46,10 +41,7 @@ public class ExportDialog extends JDialog {
             }
         });
         this.setLayout(new BorderLayout());
-        JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.addTab("Beans", getBeansPanel());
-        tabbedPane.addTab("Methods", getMethodsPanel());
-        this.add(tabbedPane, BorderLayout.CENTER);
+        this.add(getBeansPanel(), BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
@@ -111,33 +103,6 @@ public class ExportDialog extends JDialog {
         this.setSize(new Dimension(800, 600));
     }
 
-    private Component getMethodsPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout());
-        panel.add(new Label("The following methods will be generated:"), BorderLayout.PAGE_START);
-        DefaultMutableTreeNode top = new DefaultMutableTreeNode("Methods");
-        for (ExportBean exportBean : exporter.getBeans()) {
-            DefaultMutableTreeNode second = new DefaultMutableTreeNode(exportBean.getBeanName());
-            second.setUserObject(exportBean);
-            for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getName());
-                third.setUserObject(node);
-                for (ExportMethod method : node.getMethods()) {
-                    DefaultMutableTreeNode fourth = new DefaultMutableTreeNode(method.getName());
-                    fourth.setUserObject(method);
-                    third.add(fourth);
-                }
-                second.add(third);
-            }
-            top.add(second);
-        }
-        JTree tree = new JTree(top);
-        JScrollPane scrollPane = new JScrollPane(tree);
-        scrollPane.setPreferredSize(new Dimension(250, 80));
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
-    }
-
     private int showExitDialog() {
         return JOptionPane.showConfirmDialog(null, "Do you want to cancel the export?", "Cancel", JOptionPane.YES_NO_OPTION);
     }
@@ -182,19 +147,35 @@ public class ExportDialog extends JDialog {
 
     private void createNodes(DefaultMutableTreeNode top, List<ExportBean> exportBeans) {
         for (ExportBean exportBean : exportBeans) {
-            DefaultMutableTreeNode second = new DefaultMutableTreeNode(exportBean.getBeanName());
-            second.setUserObject(exportBean);
+            DefaultMutableTreeNode secondLevel = new DefaultMutableTreeNode(exportBean.getBeanName());
+            secondLevel.setUserObject(exportBean);
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                DefaultMutableTreeNode third = new DefaultMutableTreeNode(node.getName());
-                third.setUserObject(node);
+                DefaultMutableTreeNode thirdLevel = new DefaultMutableTreeNode(node.getName());
+                thirdLevel.setUserObject(node);
+                DefaultMutableTreeNode fourthLevelProperties = new DefaultMutableTreeNode("Properties");
+                thirdLevel.add(fourthLevelProperties);
                 for (ExportProperty property : node.getProperties()) {
-                    DefaultMutableTreeNode fourth = new DefaultMutableTreeNode(property.toString());
-                    fourth.setUserObject(property);
-                    third.add(fourth);
+                    DefaultMutableTreeNode fifthLevelProperties = new DefaultMutableTreeNode(property.toString());
+                    fifthLevelProperties.setUserObject(property);
+                    fourthLevelProperties.add(fifthLevelProperties);
                 }
-                second.add(third);
+                DefaultMutableTreeNode fourthLevelEvents = new DefaultMutableTreeNode("Events");
+                thirdLevel.add(fourthLevelEvents);
+                for (ExportEvent event : node.getEvents()) {
+                    DefaultMutableTreeNode fifthLevelEvents = new DefaultMutableTreeNode(event.toString());
+                    fifthLevelEvents.setUserObject(event);
+                    fourthLevelEvents.add(fifthLevelEvents);
+                }
+                DefaultMutableTreeNode fourthLevelMethods = new DefaultMutableTreeNode("Methods");
+                thirdLevel.add(fourthLevelMethods);
+                for (ExportMethod method : node.getMethods()) {
+                    DefaultMutableTreeNode fifthLevelMethods = new DefaultMutableTreeNode(method.toString());
+                    fifthLevelMethods.setUserObject(method);
+                    fourthLevelMethods.add(fifthLevelMethods);
+                }
+                secondLevel.add(thirdLevel);
             }
-            top.add(second);
+            top.add(secondLevel);
         }
     }
 
@@ -210,29 +191,14 @@ public class ExportDialog extends JDialog {
             } else if (treeNode.getUserObject() instanceof ExportProperty) {
                 panel.setViewportView(new ExportPropertyEditor(owner, exporter, (ExportProperty) treeNode.getUserObject(), tree, treeNode));
                 return;
+            } else if (treeNode.getUserObject() instanceof ExportMethod) {
+                panel.setViewportView(new ExportMethodEditor(exporter, (ExportMethod) treeNode.getUserObject(), tree, treeNode));
+                return;
+            } else if (treeNode.getUserObject() instanceof ExportEvent) {
+                panel.setViewportView(new ExportEventEditor(exporter, (ExportEvent) treeNode.getUserObject(), tree, treeNode));
+                return;
             }
-            panel.setViewportView(new JLabel("Unknown node type"));
-            return;
         }
         panel.setViewportView(new JLabel("Select a node to edit it"));
-    }
-
-    class ProgressDialog extends JDialog implements Observer {
-
-        private JLabel label = new JLabel("Initializing Export...");
-
-        ProgressDialog() {
-            setSize(new Dimension(100,50));
-            setMinimumSize(new Dimension(100, 50));
-            setMaximumSize(new Dimension(100, 50));
-            setLayout(new BorderLayout());
-            add(label, BorderLayout.CENTER);
-        }
-
-        @Override
-        public void update(Observable o, Object arg) {
-            label.setText((String) arg);
-            repaint();
-        }
     }
 }

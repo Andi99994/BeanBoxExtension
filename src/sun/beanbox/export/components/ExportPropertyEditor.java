@@ -22,7 +22,7 @@ public class ExportPropertyEditor extends JPanel {
 
     public ExportPropertyEditor(Frame owner, Exporter exporter, ExportProperty exportProperty, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
-        ExportBean exportBean = (ExportBean) ((DefaultMutableTreeNode) treeNode.getParent().getParent()).getUserObject();
+        ExportBean exportBean = (ExportBean) ((DefaultMutableTreeNode) treeNode.getParent().getParent().getParent()).getUserObject();
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("The name of the property. It must be unique among all configurable properties and be a valid Java identifier.");
         TextField nameText = new TextField();

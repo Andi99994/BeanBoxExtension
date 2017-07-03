@@ -22,7 +22,7 @@ public abstract class AbstractImageProcessBean<T extends ImageProcessListener> i
         listeners.remove(listener);
     }
 
-    protected ArrayList<T> getListeners() {
+    protected ArrayList<T> getImageProcessListeners() {
         return listeners;
     }
 
@@ -31,7 +31,7 @@ public abstract class AbstractImageProcessBean<T extends ImageProcessListener> i
         ImageProcessEvent event = new ImageProcessEvent(this, image);
 
         synchronized (this) {
-            listens = (ArrayList<ImageProcessListener>) getListeners().clone();
+            listens = (ArrayList<ImageProcessListener>) getImageProcessListeners().clone();
         }
 
         for (ImageProcessListener listener : listens) {
