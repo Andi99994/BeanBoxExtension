@@ -7,9 +7,9 @@ import java.awt.*;
 import java.awt.event.*;
 import java.beans.*;
 
-public class PropertyText extends TextField implements KeyListener, FocusListener {
+class PropertyText extends TextField implements KeyListener, FocusListener {
 
-    public PropertyText(PropertyEditor pe) {
+    PropertyText(PropertyEditor pe) {
         super(pe.getAsText());
         editor = pe;
         addKeyListener(this);

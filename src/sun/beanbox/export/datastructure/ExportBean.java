@@ -11,7 +11,7 @@ public class ExportBean {
 
     private String beanName;
     private BeanGraph beans;
-    private List<ExportMethod> methods = new LinkedList<>();
+    private boolean addPropertyChangeSupport = false;
 
     public ExportBean(BeanGraph beans, String beanName) {
         this.beans = beans;
@@ -68,6 +68,14 @@ public class ExportBean {
             }
         }
         return exportEvents;
+    }
+
+    public boolean isAddPropertyChangeSupport() {
+        return addPropertyChangeSupport;
+    }
+
+    public void setAddPropertyChangeSupport(boolean addPropertyChangeSupport) {
+        this.addPropertyChangeSupport = addPropertyChangeSupport;
     }
 
     @Override

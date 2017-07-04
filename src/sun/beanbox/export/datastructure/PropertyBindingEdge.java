@@ -18,10 +18,6 @@ public class PropertyBindingEdge extends BeanEdge {
         this.wrapperPropertyEventInfo = wrapperPropertyEventInfo;
     }
 
-    public PropertyHookup getHookup() {
-        return wrapperPropertyEventInfo.getHookup();
-    }
-
     public Method getTargetMethod() {
         return wrapperPropertyEventInfo.getSetterMethod();
     }

@@ -32,6 +32,9 @@ public class Exporter {
 
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
+    private Set<String> beanNamePool;
+    private Set<String> propertyNamePool;
+    private Set<String> methodNamePool;
 
     private String tmpDirectoryName = "/tmp";
     private static final String DEFAULT_BEAN_PACKAGE_NAME = "beanBox/generated/beans";
@@ -104,19 +107,19 @@ public class Exporter {
         for (PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
             if (!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
                 ExportProperty property = new ExportProperty(propertyDescriptor, beanNode);
-                if(wrapper.getChangedProperties().contains(propertyDescriptor)) {
+                if (wrapper.getChangedProperties().contains(propertyDescriptor)) {
                     property.setSetDefaultValue(true);
                 }
                 beanNode.getProperties().add(property);
             }
         }
         for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
-            if(!methodDescriptor.isExpert() && !methodDescriptor.isHidden()) {
+            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")) {
                 beanNode.getMethods().add(new ExportMethod(methodDescriptor, beanNode));
             }
         }
         for (EventSetDescriptor eventSetDescriptor : beanInfo.getEventSetDescriptors()) {
-            if(!eventSetDescriptor.isExpert() && !eventSetDescriptor.isHidden()) {
+            if (!eventSetDescriptor.isExpert() && !eventSetDescriptor.isHidden() && !eventSetDescriptor.getName().equals("propertyChange")) {
                 beanNode.getEvents().add(new ExportEvent(eventSetDescriptor, beanNode));
             }
         }
@@ -216,7 +219,6 @@ public class Exporter {
             String[] filenameSplit = filename.split(Pattern.quote("."));
             if (!filenameSplit[filenameSplit.length - 1].equals("jar")) filename += ".jar";
             File target = new File(directory, filename);
-            //if (target.isFile()) throw new IOException("File already exists!");
             int counter = 0;
             while (new File(directory + tmpDirectoryName + counter).isDirectory()) {
                 counter++;
@@ -238,6 +240,7 @@ public class Exporter {
                     generateManifest(tmpManifestDirectory);
                     compileSources(tmpBeanDirectory, resources);
                     packJar(target, tmpDirectory);
+                    //TODO: delete tmpFiles
                 } else {
                     throw new IOException("Error creating temporary directories at: " + directory);
                 }
@@ -250,7 +253,7 @@ public class Exporter {
 
     private List<File> generatePropertAdapters(File tmpAdapterDirectory) throws IOException, NoSuchMethodException {
         List<File> adapters = new ArrayList<>();
-        for(ExportBean exportBean : exportBeans) {
+        for (ExportBean exportBean : exportBeans) {
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
                 for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
                     adapters.add(generatePropertAdapter(tmpAdapterDirectory, edge));
@@ -413,7 +416,7 @@ public class Exporter {
         List<ExportMethod> exportMethods = exportBean.getMethods();
         List<ExportEvent> exportEvents = exportBean.getEvents();
         List<Class> interfaces = new ArrayList<>();
-        for(BeanNode node : exportBean.getBeans().getInputNodes()) {
+        for (BeanNode node : exportBean.getBeans().getInputNodes()) {
             for (Class cls : node.getData().getClass().getInterfaces()) {
                 if (EventListener.class.isAssignableFrom(cls) && !interfaces.contains(cls) && !cls.getName().contains("PropertyChange")) {
                     interfaces.add(cls);
@@ -454,6 +457,12 @@ public class Exporter {
             }
         }*/
         writer.println("import java.io.Serializable;");
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println("import java.beans.PropertyChangeSupport;");
+            writer.println("import java.beans.PropertyChangeListener;");
+            writer.println("import java.beans.PropertyChangeEvent;");
+            interfaces.add(PropertyChangeListener.class);
+        }
         writer.println();
 
         StringBuilder implementations = new StringBuilder(" implements Serializable");
@@ -465,11 +474,16 @@ public class Exporter {
         for (BeanNode node : exportBean.getBeans().getAllNodes()) {
             writer.println("private " + node.getData().getClass().getCanonicalName() + " " + node.lowercaseFirst() + ";");
         }
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println();
+            writer.println("    private PropertyChangeSupport cs = new PropertyChangeSupport(this);");
+        }
+
         /*writer.println();
         for (ExportProperty exportProperty : exportProperties) {
             writer.println("private " + exportProperty.getPropertyType().getCanonicalName() + " " + exportProperty.getName() + ";");
         }*/
-        //TODO: PropertyChange & Veto Support
+        //TODO: Veto Support -> postponed
         writer.println();
         writer.println("    public " + exportBean.getBeanName() + "() {");
         for (BeanNode node : exportBean.getBeans().getAllNodes()) {
@@ -508,7 +522,7 @@ public class Exporter {
                     ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
                 }
                 ser.getParentFile().mkdirs();
-                try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))){
+                try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))) {
                     out.writeObject(value);
                     writer.println("        try (java.io.ObjectInputStream in = new java.io.ObjectInputStream(getClass().getResourceAsStream(\"" + getRelativePath(beanDirectory.getAbsolutePath(), ser, false) + "\"))){");
                     writer.println("            " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
@@ -516,19 +530,37 @@ public class Exporter {
                     writer.println("        } catch (java.io.IOException | java.lang.ClassNotFoundException e) {");
                     writer.println("            e.printStackTrace();");
                     writer.println("        }");
-                } catch(IOException i) {
+                } catch (IOException i) {
                     throw new IOException("Error serializing property: " + property.getNode().getName() + ":" + property.getName());
                 }
             }
         }
-        //TODO: sort order to recognise property bindings
+        //TODO: sort order to recognise property bindings -> postponed
         writer.println("    }");
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println();
+            writer.println("\tpublic void addPropertyChangeListener(PropertyChangeListener listener) {");
+            writer.println("\t\tcs.addPropertyChangeListener(listener);");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\tpublic void removePropertyChangeListener(PropertyChangeListener listener) {");
+            writer.println("\t\tcs.removePropertyChangeListener(listener);");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\tpublic PropertyChangeListener[] getPropertyChangeListeners() {");
+            writer.println("\t\treturn cs.getPropertyChangeListeners();");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\t@Override");
+            writer.println("\tpublic void propertyChange(PropertyChangeEvent evt) {}");
+            writer.println();
+        }
         writer.println();
         for (ExportProperty property : exportProperties) {
             Method getter = property.getPropertyDescriptor().getReadMethod();
             StringBuilder getterSignature = new StringBuilder("\tpublic " + property.getPropertyType().getCanonicalName() + " " + getter.getName() + "(");
-            for(int i = 0; i < getter.getParameterTypes().length; i++) {
-                if(i == 0) {
+            for (int i = 0; i < getter.getParameterTypes().length; i++) {
+                if (i == 0) {
                     getterSignature.append(getter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
                 } else {
                     getterSignature.append(", ").append(getter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
@@ -546,8 +578,8 @@ public class Exporter {
             getterSignature.append("{");
             writer.println(getterSignature);
             StringBuilder getterCall = new StringBuilder("\t\treturn ").append(property.getNode().lowercaseFirst()).append(".").append(getter.getName()).append("(");
-            for(int i = 0; i < getter.getParameterTypes().length; i++) {
-                if(i == 0) {
+            for (int i = 0; i < getter.getParameterTypes().length; i++) {
+                if (i == 0) {
                     getterCall.append("arg").append(i);
                 } else {
                     getterCall.append(", arg").append(i);
@@ -560,8 +592,8 @@ public class Exporter {
 
             Method setter = property.getPropertyDescriptor().getWriteMethod();
             StringBuilder setterSignature = new StringBuilder("\tpublic void " + setter.getName() + "(");
-            for(int i = 0; i < setter.getParameterTypes().length; i++) {
-                if(i == 0) {
+            for (int i = 0; i < setter.getParameterTypes().length; i++) {
+                if (i == 0) {
                     setterSignature.append(setter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
                 } else {
                     setterSignature.append(", ").append(setter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
@@ -578,9 +610,12 @@ public class Exporter {
             }
             setterSignature.append("{");
             writer.println(setterSignature);
+            if(exportBean.isAddPropertyChangeSupport()) {
+                writer.println("\t\tcs.firePropertyChange(\"" + property.getName() + "\", " + property.getNode().lowercaseFirst() + ".get" + property.uppercaseFirst() + "(), arg0);");
+            }
             StringBuilder setterCall = new StringBuilder("\t\t").append(property.getNode().lowercaseFirst()).append(".").append(setter.getName()).append("(");
-            for(int i = 0; i < setter.getParameterTypes().length; i++) {
-                if(i == 0) {
+            for (int i = 0; i < setter.getParameterTypes().length; i++) {
+                if (i == 0) {
                     setterCall.append("arg").append(i);
                 } else {
                     setterCall.append(", arg").append(i);
@@ -592,28 +627,27 @@ public class Exporter {
             writer.println();
         }
         writer.println();
-        //TODO: print input & output interface
         for (ExportEvent event : exportEvents) { //TODO: optimize
             writer.println("\tpublic void " + event.getEventSetDescriptor().getAddListenerMethod().getName() + "(" + event.getEventSetDescriptor().getListenerType().getCanonicalName() + " listener) {");
-            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getAddListenerMethod().getName() + "(listener);" );
+            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getAddListenerMethod().getName() + "(listener);");
             writer.println("\t}");
             writer.println();
-            if(event.getEventSetDescriptor().getGetListenerMethod() != null) {
+            if (event.getEventSetDescriptor().getGetListenerMethod() != null) {
                 writer.println("\tpublic " + event.getEventSetDescriptor().getGetListenerMethod().getReturnType().getCanonicalName() + " " + event.getEventSetDescriptor().getGetListenerMethod().getName() + "() {");
-                writer.println("\t\treturn " + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getGetListenerMethod().getName() + "();" );
+                writer.println("\t\treturn " + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getGetListenerMethod().getName() + "();");
                 writer.println("\t}");
                 writer.println();
             }
             writer.println("\tpublic void " + event.getEventSetDescriptor().getRemoveListenerMethod().getName() + "(" + event.getEventSetDescriptor().getListenerType().getCanonicalName() + " listener) {");
-            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getRemoveListenerMethod().getName() + "(listener);" );
+            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getRemoveListenerMethod().getName() + "(listener);");
             writer.println("\t}");
             writer.println();
         }
         for (ExportMethod exportMethod : exportMethods) {
             Method method = exportMethod.getMethodDescriptor().getMethod();
             StringBuilder methodSignature = new StringBuilder("\tpublic " + method.getReturnType().getCanonicalName() + " " + method.getName() + "(");
-            for(int i = 0; i < method.getParameterTypes().length; i++) {
-                if(i == 0) {
+            for (int i = 0; i < method.getParameterTypes().length; i++) {
+                if (i == 0) {
                     methodSignature.append(method.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
                 } else {
                     methodSignature.append(", ").append(method.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
@@ -631,8 +665,8 @@ public class Exporter {
             methodSignature.append("{");
             writer.println(methodSignature);
             StringBuilder methodCall = new StringBuilder("\t\t").append(exportMethod.getNode().lowercaseFirst()).append(".").append(method.getName()).append("(");
-            for(int i = 0; i < method.getParameterTypes().length; i++) {
-                if(i == 0) {
+            for (int i = 0; i < method.getParameterTypes().length; i++) {
+                if (i == 0) {
                     methodCall.append("arg").append(i);
                 } else {
                     methodCall.append(", arg").append(i);
@@ -655,6 +689,9 @@ public class Exporter {
         writer.println();
         writer.println("import java.beans.*;");
         writer.println("import java.io.Serializable;");
+        if(exportBean.isAddPropertyChangeSupport()) {
+            writer.println("import java.beans.PropertyChangeListener;");
+        }
         writer.println();
         writer.println("public class " + exportBean.getBeanName() + "BeanInfo extends SimpleBeanInfo implements Serializable {");
         writer.println();
@@ -687,12 +724,16 @@ public class Exporter {
             writer.println();
         }
 
-        if(!exportEvents.isEmpty()) {
+        if (!exportEvents.isEmpty()) {
             writer.println("    @Override");
             writer.println("    public EventSetDescriptor[] getEventSetDescriptors() {");
             writer.println("        try {");
             writer.println("            Class cls = " + exportBean.getBeanName() + ".class;");
             StringBuilder eventSetDescriptorArray = new StringBuilder("{");
+            if(exportBean.isAddPropertyChangeSupport()) {
+                writer.println("            EventSetDescriptor esdPropertyChange = new EventSetDescriptor(cls, \"propertyChange\", PropertyChangeListener.class, \"propertyChange\");");
+                eventSetDescriptorArray.append("esdPropertyChange");
+            }
             for (ExportEvent exportEvent : exportEvents) {
                 String descriptorName = "esd" + exportEvent.uppercaseFirst();
                 writer.println("            EventSetDescriptor " + descriptorName + " = new EventSetDescriptor(cls, \"" + exportEvent.getName() //TODO:generify
@@ -714,7 +755,7 @@ public class Exporter {
             writer.println();
         }
 
-        if(!exportEvents.isEmpty()) {
+        if (!exportEvents.isEmpty()) {
             writer.println("    @Override");
             writer.println("    public MethodDescriptor[] getMethodDescriptors() {");
             writer.println("        try {");
@@ -722,7 +763,6 @@ public class Exporter {
             StringBuilder methodDescriptorArray = new StringBuilder("{");
             for (ExportMethod exportMethod : exportMethods) {
                 String descriptorName = "md" + exportMethod.uppercaseFirst();
-                //writer.println("            MethodDescriptor mdProcess = new MethodDescriptor(cls.getMethod(\"process\", new Class[]{event.ImageProcessEvent.class}), null);");
                 writer.println("            MethodDescriptor " + descriptorName + " = new MethodDescriptor(cls.getMethod(\"" + exportMethod.getName() //TODO:generify
                         + "\", new Class[]{" + exportMethod.getMethodDescriptor().getMethod().getParameterTypes()[0].getCanonicalName() + ".class}), null);");
                 if (methodDescriptorArray.length() > 1) {
@@ -772,7 +812,7 @@ public class Exporter {
         writer.println();
         writer.println("    public void propertyChange(PropertyChangeEvent evt) {");
         writer.println("        try {");
-        writer.println("            target." + propertyBindingEdge.getTargetMethod().getName() + "(("+ propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName()+") evt.getNewValue());");
+        writer.println("            target." + propertyBindingEdge.getTargetMethod().getName() + "((" + propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName() + ") evt.getNewValue());");
         writer.println("        } catch (Exception e) {");
         writer.println("            e.printStackTrace();");
         writer.println("        }");
@@ -785,7 +825,7 @@ public class Exporter {
         return adapter;
     }
 
-    private List<ExportProperty> sortPropertiesByBinding(List<ExportProperty> properties){
+    private List<ExportProperty> sortPropertiesByBinding(List<ExportProperty> properties) {
         //TODO: think
         return properties;
     }
@@ -805,7 +845,7 @@ public class Exporter {
     private String getRelativePath(String base, File file, boolean leadingSlash) {
         String[] split = file.getAbsolutePath().split(Pattern.quote(base));
         String relativePath = split.length > 1 ? split[1] : split[0];
-        if(relativePath != null && relativePath.length() > 2 && !leadingSlash) {
+        if (relativePath != null && relativePath.length() > 2 && !leadingSlash) {
             relativePath = relativePath.substring(1, relativePath.length());
         }
         return relativePath.replace('\\', '/');
@@ -827,8 +867,8 @@ public class Exporter {
         return object.toString();
     }
 
-    private String purifyString(String in){
-        in = in.replace("\\","\\\\");
+    private String purifyString(String in) {
+        in = in.replace("\\", "\\\\");
         in = in.replace(Pattern.quote("\""), "\\\"");
         in = in.replace(Pattern.quote("\'"), "\\\'");
         return in;

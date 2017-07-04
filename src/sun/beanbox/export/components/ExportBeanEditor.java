@@ -32,6 +32,11 @@ public class ExportBeanEditor extends JPanel {
             }
         });
         nameText.setColumns(30);
+        JCheckBox propertyChange = new JCheckBox("Add PropertyChange Support");
+        propertyChange.setAlignmentX(Component.CENTER_ALIGNMENT);
+        propertyChange.setSelected(exportBean.isAddPropertyChangeSupport());
+        propertyChange.addActionListener(e -> exportBean.setAddPropertyChangeSupport(propertyChange.isSelected()));
+        propertyChange.setToolTipText("Select whether PropertyChange support should be added to be able to bind to Properties.");
 
         GridBagConstraints c = new GridBagConstraints();
         c.weightx = 20;
@@ -41,5 +46,9 @@ public class ExportBeanEditor extends JPanel {
         add(nameText, c);
         c.gridy = 1;
         add(nameCheckLabel, c);
+        c.gridy = 2;
+        c.gridx = 0;
+        c.gridwidth = 2;
+        add(propertyChange, c);
     }
 }

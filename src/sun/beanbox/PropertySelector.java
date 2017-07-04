@@ -7,9 +7,9 @@ import java.awt.*;
 import java.awt.event.*;
 import java.beans.*;
 
-public class PropertySelector extends Choice implements ItemListener {
+class PropertySelector extends Choice implements ItemListener {
 
-    public PropertySelector(PropertyEditor pe) {
+    PropertySelector(PropertyEditor pe) {
         editor = pe;
         String tags[] = editor.getTags();
         for (int i = 0; i < tags.length; i++) {

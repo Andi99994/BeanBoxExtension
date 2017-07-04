@@ -1,9 +1,6 @@
 package sun.beanbox;
 
-import sunw.beanbox.PropertyHookup;
-
 import java.lang.reflect.Method;
-import java.beans.EventSetDescriptor;
 
 // Subclass of WrapperEventInfo for when the connection is really to
 // a "bound property"
@@ -12,12 +9,11 @@ public class WrapperPropertyEventInfo extends WrapperEventInfo {
 
     public WrapperPropertyEventInfo(Object target,
                                     String pname,
-                                    Method smethod, PropertyHookup hook) {
+                                    Method smethod) {
         super(target, "sunw.beanbox.PropertyHookup", "propertyChange");
         propertyName = pname;
         setterName = smethod.getName();
         setterTypes = initStringFromType(smethod.getParameterTypes());
-        hookup = hook;
         setterMethod = smethod;
     }
 
@@ -33,10 +29,6 @@ public class WrapperPropertyEventInfo extends WrapperEventInfo {
         return setterTypes;
     }
 
-    public PropertyHookup getHookup() {
-        return hookup;
-    }
-
     public Method getSetterMethod() {
         return setterMethod;
     }
@@ -44,9 +36,9 @@ public class WrapperPropertyEventInfo extends WrapperEventInfo {
     private String initStringFromType(Class[] klass) {
         StringBuffer buf = new StringBuffer();
         buf.append("new String[] {");
-        for (int i=0; i<klass.length; i++) {
+        for (int i = 0; i < klass.length; i++) {
             buf.append("\"").append(klass[i].getName()).append("\"");
-            if (i != klass.length-1) {
+            if (i != klass.length - 1) {
                 buf.append(", ");
             }
         }
@@ -57,7 +49,6 @@ public class WrapperPropertyEventInfo extends WrapperEventInfo {
     private String setterName;
     private String setterTypes;
     private String propertyName;
-    private PropertyHookup hookup;
     private Method setterMethod;
 }
 
