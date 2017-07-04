@@ -26,15 +26,18 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 
 /**
- * Created by Andreas Ertlschweiger on 06.05.2017.
+ * Created by Andreas on 06.05.2017.
+ *
+ * This is the main component responsible for the export process. It first converts all selected Wrapper objects into
+ * a better suited datastructure, a directed graph, that contains all relevant information. Any changes made to the
+ * configuration will affect how the bean will be generated.
  */
 public class Exporter {
 
+    //Map between Bean and Wrapper. This is for easier and faster access and comparison
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
-    private Set<String> beanNamePool;
-    private Set<String> propertyNamePool;
-    private Set<String> methodNamePool;
+    private Set<String> reservedPropertyNames = new HashSet<>();
 
     private String tmpDirectoryName = "/tmp";
     private static final String DEFAULT_BEAN_PACKAGE_NAME = "beanBox/generated/beans";
@@ -43,12 +46,100 @@ public class Exporter {
 
     private static final String DEFAULT_BEAN_NAME = "ExportBean";
 
+    /**
+     * Upon instantiation of the Exporter the selected Wrappers are grouped, processed and converted into a more suitable
+     * datastructure.
+     *
+     * @param beans the beans that were selected for export
+     * @throws IntrospectionException if there is an error reading bean information
+     * @throws IllegalArgumentException if there is an error accessing bean properties
+     * @throws InvocationTargetException if there is an error accessing bean properties
+     * @throws IllegalAccessException if there is an error accessing bean properties
+     */
     public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
+        reservedPropertyNames.add("propertyChange");
         for (List<Wrapper> group : groupWrappers(beans)) {
             exportBeans.add(assembleExportBean(group, DEFAULT_BEAN_NAME + exportBeans.size()));
         }
     }
 
+    public List<ExportBean> getBeans() {
+        return exportBeans;
+    }
+
+    /**
+     * This method analyzes the bindings between all Wrappers and groups them. Wrappers in a group have to be connected
+     * to eachother either via a direct composition, adapter composition or a property binding. Each group of Wrappers
+     * will be processed as a separate ExportBean.
+     *
+     * @param wrappers all Wrappers that are being exported
+     * @return returns a list of groups of Wrappers
+     */
+    private List<List<Wrapper>> groupWrappers(List<Wrapper> wrappers) {
+        HashMap<Wrapper, Integer> groupMap = new HashMap<>();
+        for (Wrapper wrapper : wrappers) {
+            //initialize the wrapperBeanMap
+            wrapperBeanMap.put(wrapper.getBean(), wrapper);
+            //add all Wrappers without a group yet
+            groupMap.put(wrapper, null);
+        }
+        int groupCount = 0;
+        for (Wrapper wrapper : wrappers) {
+            Integer curGroup = groupMap.get(wrapper);
+            //if the current Wrapper hasn't been assigned a group yet do so
+            if (curGroup == null) {
+                //analyze all bindings
+                for (Object bean : wrapper.getCompositionTargets()) {
+                    Wrapper beanWrapper = wrapperBeanMap.get(bean);
+                    if (beanWrapper != null && groupMap.get(beanWrapper) != null) {
+                        curGroup = groupMap.get(beanWrapper);
+                        break;
+                    }
+                }
+            }
+            //if we still don't have a group, create a new one
+            if (curGroup == null) {
+                curGroup = groupCount;
+                groupCount++;
+            }
+            //assign the Wrapper to the group
+            groupMap.replace(wrapper, curGroup);
+            //assign all related Wrappers to the group
+            for (Object bean : wrapper.getCompositionTargets()) {
+                Wrapper beanWrapper = wrapperBeanMap.get(bean);
+                if (beanWrapper != null) {
+                    groupMap.replace(beanWrapper, curGroup);
+                }
+            }
+        }
+        //convert the HashMap into a list. Using a second HashMap is easier and faster in case of a high number of groups
+        HashMap<Integer, List<Wrapper>> groupedWrappers = new HashMap<>();
+        for (Map.Entry<Wrapper, Integer> entry : groupMap.entrySet()) {
+            if (groupedWrappers.containsKey(entry.getValue())) {
+                groupedWrappers.get(entry.getValue()).add(entry.getKey());
+            } else {
+                groupedWrappers.put(entry.getValue(), new LinkedList<>());
+                groupedWrappers.get(entry.getValue()).add(entry.getKey());
+            }
+        }
+        return new ArrayList<>(groupedWrappers.values());
+    }
+
+    /**
+     * This method converts a group of Wrappers into a single ExportBean. It does so by converting each Wrapper into a
+     * BeanNode and constructing a graph consisting of the compositions and bindings. While converting the Wrappers the
+     * Bean information (events, methods, properties) are read and also converted. Afterwards it tries to infer the
+     * input and output nodes. If this fails, the user is prompted to select them. This usually happens if there are cyclic references.
+     * This information can be changed later, but an initial configuration is required to construct the graph.
+     *
+     * @param wrappers a list of Wrappers that should be converted into an ExportBean
+     * @param name the name of the ExportBean
+     * @return returns an ExportBean containing all important information
+     * @throws IntrospectionException if there is an error reading bean information
+     * @throws IllegalArgumentException if there is an error reading properties
+     * @throws InvocationTargetException if there is an error reading properties
+     * @throws IllegalAccessException if there is an error reading properties
+     */
     private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
@@ -60,6 +151,85 @@ public class Exporter {
         return new ExportBean(beanGraph, name);
     }
 
+    /**
+     * Recursively converts Wrappers into BeanNodes. While doing so, all required information is gathered and also
+     * converted.
+     *
+     * @param wrapper the Wrapper to convert.
+     * @param createdNodes all BeanNodes of an ExportBean that have already been created. This is needed to deal with cyclic composition.
+     * @return returns a BeanNode
+     * @throws IntrospectionException if there is an error reading bean information
+     * @throws InvocationTargetException if there is an error reading properties
+     * @throws IllegalAccessException if there is an error reading properties
+     */
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException {
+        //avoid following cyclic references
+        if (createdNodes.get(wrapper) != null) {
+            return createdNodes.get(wrapper);
+        }
+        BeanNode beanNode = new BeanNode(wrapper.getBean(), wrapper.getBeanLabel());
+        beanNode.setJarPath(wrapper.getJarPath());
+        BeanInfo beanInfo = Introspector.getBeanInfo(beanNode.getData().getClass());
+        //add all properties eligible for export
+        for (PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
+            if (!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
+                ExportProperty property = new ExportProperty(propertyDescriptor, beanNode);
+                //if the property has been changed at least once it is likely that we want to set this as the default value after export
+                if (wrapper.getChangedProperties().contains(propertyDescriptor)) {
+                    property.setSetDefaultValue(true);
+                }
+                beanNode.getProperties().add(property);
+            }
+        }
+        //add all methods eligible for export. It is highly suggested to define these in a BeanInfo as otherwise there are going to be a lot
+        for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
+            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")) {
+                beanNode.getMethods().add(new ExportMethod(methodDescriptor, beanNode));
+            }
+        }
+        //add all events eligible for export
+        for (EventSetDescriptor eventSetDescriptor : beanInfo.getEventSetDescriptors()) {
+            if (!eventSetDescriptor.isExpert() && !eventSetDescriptor.isHidden() && !eventSetDescriptor.getName().equals("propertyChange")) {
+                beanNode.getEvents().add(new ExportEvent(eventSetDescriptor, beanNode));
+            }
+        }
+        createdNodes.put(wrapper, beanNode);
+        //add all direct compositions
+        for (WrapperEventTarget end : wrapper.getDirectTargets()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end.getTargetBean());
+            if (beanWrapper != null) {
+                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
+                beanNode.addEdge(new DirectCompositionEdge(beanNode, childNode, end));
+            }
+        }
+        //add all adapter compositions
+        for (WrapperEventTarget end : wrapper.getEventHookupTargets()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end.getTargetBean());
+            if (beanWrapper != null) {
+                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
+                beanNode.addEdge(new AdapterCompositionEdge(beanNode, childNode, end));
+            }
+        }
+        //add all property bindings
+        for (WrapperPropertyEventInfo end : wrapper.getPropertyTargets()) {
+            Wrapper beanWrapper = wrapperBeanMap.get(end.getTargetBean());
+            if (beanWrapper != null) {
+                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
+                beanNode.addEdge(new PropertyBindingEdge(beanNode, childNode, end));
+            }
+        }
+        return beanNode;
+    }
+
+    /**
+     * This method tries to infer the output interface of the ExportBean. It does so by checking which beans are only listeners
+     * and do not have any listeners. These beans are except for some special cases very likely to be the correct ones.
+     * If this fails a NodeSelector is shown to let the user specify the output interface.
+     *
+     * @param createdNodes All available beans
+     * @return returns a list of BeanNodes that compose the output interface
+     * @throws IllegalArgumentException if no Beans are specified as the output interface we cannot continue
+     */
     private List<BeanNode> inferOutputBeans(HashMap<Wrapper, BeanNode> createdNodes) throws IllegalArgumentException {
         List<BeanNode> availableNodes = new LinkedList<>();
         for (BeanNode node : createdNodes.values()) {
@@ -77,6 +247,15 @@ public class Exporter {
         return availableNodes;
     }
 
+    /**
+     * This method tries to infer the input interface of the ExportBean. It does so by checking which beans only have listeners
+     * and do not listen to any bean. These beans are except for some special cases very likely to be the correct ones.
+     * If this fails a NodeSelector is shown to let the user specify the input interface.
+     *
+     * @param createdNodes All available beans
+     * @return returns a list of BeanNodes that compose the input interface
+     * @throws IllegalArgumentException if no Beans are specified as the input interface we cannot continue
+     */
     private List<BeanNode> inferInputBeans(HashMap<Wrapper, BeanNode> createdNodes) throws IllegalArgumentException {
         Set<BeanNode> availableNodes = new HashSet<>(createdNodes.values());
         for (BeanNode node : createdNodes.values()) {
@@ -97,102 +276,13 @@ public class Exporter {
         return new ArrayList<>(availableNodes);
     }
 
-    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException {
-        if (createdNodes.get(wrapper) != null) {
-            return createdNodes.get(wrapper);
-        }
-        BeanNode beanNode = new BeanNode(wrapper.getBean(), wrapper.getBeanLabel());
-        beanNode.setJarPath(wrapper.getJarPath());
-        BeanInfo beanInfo = Introspector.getBeanInfo(beanNode.getData().getClass());
-        for (PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
-            if (!propertyDescriptor.isHidden() && !propertyDescriptor.isExpert() && propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null) {
-                ExportProperty property = new ExportProperty(propertyDescriptor, beanNode);
-                if (wrapper.getChangedProperties().contains(propertyDescriptor)) {
-                    property.setSetDefaultValue(true);
-                }
-                beanNode.getProperties().add(property);
-            }
-        }
-        for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
-            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")) {
-                beanNode.getMethods().add(new ExportMethod(methodDescriptor, beanNode));
-            }
-        }
-        for (EventSetDescriptor eventSetDescriptor : beanInfo.getEventSetDescriptors()) {
-            if (!eventSetDescriptor.isExpert() && !eventSetDescriptor.isHidden() && !eventSetDescriptor.getName().equals("propertyChange")) {
-                beanNode.getEvents().add(new ExportEvent(eventSetDescriptor, beanNode));
-            }
-        }
-        createdNodes.put(wrapper, beanNode);
-        for (WrapperEventTarget end : wrapper.getDirectTargets()) {
-            Wrapper beanWrapper = wrapperBeanMap.get(end.getTargetBean());
-            if (beanWrapper != null) {
-                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
-                beanNode.addEdge(new DirectCompositionEdge(beanNode, childNode, end));
-            }
-        }
-        for (WrapperEventTarget end : wrapper.getEventHookupTargets()) {
-            Wrapper beanWrapper = wrapperBeanMap.get(end.getTargetBean());
-            if (beanWrapper != null) {
-                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
-                beanNode.addEdge(new AdapterCompositionEdge(beanNode, childNode, end));
-            }
-        }
-        for (WrapperPropertyEventInfo end : wrapper.getPropertyTargets()) {
-            Wrapper beanWrapper = wrapperBeanMap.get(end.getTargetBean());
-            if (beanWrapper != null) {
-                BeanNode childNode = createBeanNode(beanWrapper, createdNodes);
-                beanNode.addEdge(new PropertyBindingEdge(beanNode, childNode, end));
-            }
-        }
-        return beanNode;
-    }
-
-    private List<List<Wrapper>> groupWrappers(List<Wrapper> wrappers) {
-        HashMap<Wrapper, Integer> groupMap = new HashMap<>();
-        for (Wrapper wrapper : wrappers) {
-            wrapperBeanMap.put(wrapper.getBean(), wrapper);
-            groupMap.put(wrapper, null);
-        }
-        int groupCount = 0;
-        for (Wrapper wrapper : wrappers) {
-            Integer curGroup = groupMap.get(wrapper);
-            if (curGroup == null) {
-                for (Object bean : wrapper.getCompositionTargets()) {
-                    Wrapper beanWrapper = wrapperBeanMap.get(bean);
-                    if (beanWrapper != null && groupMap.get(beanWrapper) != null) {
-                        curGroup = groupMap.get(beanWrapper);
-                    }
-                }
-            }
-            if (curGroup == null) {
-                curGroup = groupCount;
-                groupCount++;
-            }
-            groupMap.replace(wrapper, curGroup);
-            for (Object bean : wrapper.getCompositionTargets()) {
-                Wrapper beanWrapper = wrapperBeanMap.get(bean);
-                if (beanWrapper != null) {
-                    groupMap.replace(beanWrapper, curGroup);
-                }
-            }
-        }
-        HashMap<Integer, List<Wrapper>> groupedWrappers = new HashMap<>();
-        for (Map.Entry<Wrapper, Integer> entry : groupMap.entrySet()) {
-            if (groupedWrappers.containsKey(entry.getValue())) {
-                groupedWrappers.get(entry.getValue()).add(entry.getKey());
-            } else {
-                groupedWrappers.put(entry.getValue(), new LinkedList<>());
-                groupedWrappers.get(entry.getValue()).add(entry.getKey());
-            }
-        }
-        return new ArrayList<>(groupedWrappers.values());
-    }
-
-    public List<ExportBean> getBeans() {
-        return exportBeans;
-    }
-
+    /**
+     * Checks if a String is a valid name for an ExportBean. It may not be empty, must not exceed 32 characters, be a valid Java identifier,
+     * must not be a Java keyword and it must be unique among all ExportBeans in a single export. Additionally the String may not conflict
+     * with any resources required to build the JAR file -> This is NOT checked here.
+     * @param text the text to be checked
+     * @return returns if the name is valid
+     */
     public boolean checkIfValidClassName(String text) {
         boolean isValidClassName = text != null && !text.isEmpty() && text.length() < 32 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
         if (!isValidClassName) return false;
@@ -205,7 +295,15 @@ public class Exporter {
         return true;
     }
 
-    public boolean checkIfValidPropertyName(ExportBean exportBean, String text) {
+    /**
+     * Checks if a String is a valid name for an ExportProperty. It may not be empty, must not exceed 32 characters, be a valid Java identifier,
+     * must not be a Java keyword and it must be unique among all ExportProperties in a single ExportBean. Additionally the String may not conflict
+     * with any generated method or event names.
+     * @param text the text to be checked
+     * @param exportBean the exportBean to which the property belongs
+     * @return returns if the name is valid
+     */
+    public boolean checkIfValidPropertyName(ExportBean exportBean, String text) { //TODO: check for conflicts of generated methods
         boolean isValidPropertyName = text != null && !text.isEmpty() && text.length() < 32 && SourceVersion.isIdentifier(text) && !SourceVersion.isKeyword(text);
         if (!isValidPropertyName) return false;
         for (ExportProperty property : exportBean.getProperties()) {
@@ -233,7 +331,7 @@ public class Exporter {
                 if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
                     ArrayList<File> resources = collectResources();
                     copyAndExtractResources(tmpDirectory, resources);
-                    resources.addAll(generatePropertAdapters(tmpAdapterDirectory));
+                    resources.addAll(generatePropertyAdapters(tmpAdapterDirectory));
                     for (ExportBean exportBean : exportBeans) {
                         generateBean(tmpDirectory, tmpBeanDirectory, tmpPropertiesDirectory, tmpAdapterDirectory, exportBean);
                     }
@@ -251,7 +349,7 @@ public class Exporter {
 
     }
 
-    private List<File> generatePropertAdapters(File tmpAdapterDirectory) throws IOException, NoSuchMethodException {
+    private List<File> generatePropertyAdapters(File tmpAdapterDirectory) throws IOException, NoSuchMethodException {
         List<File> adapters = new ArrayList<>();
         for (ExportBean exportBean : exportBeans) {
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {

@@ -470,6 +470,8 @@ public class BeanBox extends Panel implements Serializable, Runnable,
 
     /**
      * Andreas Erlschweiger 2017
+     *
+     * Sets a flag that signals that the user wants to select the beans for exporting.
      */
     private void export() {
         exporting = true;
@@ -477,11 +479,13 @@ public class BeanBox extends Panel implements Serializable, Runnable,
 
     /**
      * Andreas Ertlschweiger 2017
+     *
+     * Initiates the exporting process. Returns if no beans have been selected.
+     * This method also opens an Error Dialog if any exceptions is thrown while setting up the Exporter.
      */
     private void finishExport() {
-        Component[] components = getComponents();
         ArrayList<Wrapper> selectedComponents = new ArrayList<>();
-        for (Component component : components) {
+        for (Component component : getComponents()) {
             if(isInSelection(rectangle, component) && component instanceof Wrapper) {
                 Wrapper wrapper = (Wrapper) component;
                 selectedComponents.add(wrapper);
@@ -497,15 +501,9 @@ public class BeanBox extends Panel implements Serializable, Runnable,
         }
         try {
             ExportDialog exportDialog = new ExportDialog(this.getFrame(), new Exporter(selectedComponents));
-            exportDialog.show();
-        } catch (IntrospectionException e) {
-            error("Could not read properties of one or more Beans", e);
-        } catch (IllegalArgumentException e) {
-            error("You need to select at least one input and output node if inferring is not possible", e);
-        } catch (IllegalAccessException e) {
-            error("Could not access properties", e);
-        } catch (InvocationTargetException e) {
-            error("Could not invoke methods", e);
+            exportDialog.setVisible(true);
+        } catch (Exception e) {
+            error("There was an error while exporting.", e);
         }
     }
 

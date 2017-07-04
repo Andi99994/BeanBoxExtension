@@ -10,10 +10,17 @@ import java.awt.*;
 import java.util.List;
 
 /**
- * Created by Andi on 22.06.2017.
+ * Created by Andreas on 22.06.2017.
+ *
+ * This class represents the view to customise the BeanNodes during exporting.
  */
 public class BeanNodeEditor extends JPanel {
 
+    /**
+     * This constructs all UI elements required to customise a BeanNode.
+     *
+     * @param beanNode the BeanNode to be customised
+     */
     public BeanNodeEditor(BeanNode beanNode) {
         setLayout(new GridBagLayout());
 
@@ -28,7 +35,7 @@ public class BeanNodeEditor extends JPanel {
         manifest.setAlignmentX(Component.CENTER_ALIGNMENT);
         manifest.setSelected(beanNode.isRegisterInManifest());
         manifest.addActionListener(e -> beanNode.setRegisterInManifest(manifest.isSelected()));
-        manifest.setToolTipText("Select whether the bean should still be visible as a bean after export by registering it in the manifest");
+        manifest.setToolTipText("Select whether the bean should still be visible as a bean after export by registering it in the manifest.");
 
         JCheckBox input = new JCheckBox("Input interface");
         input.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -59,6 +66,7 @@ public class BeanNodeEditor extends JPanel {
         add(input, c);
         c.gridy = 3;
         add(output, c);
+        //print all direct compositions
         List<DirectCompositionEdge> directCompositions = beanNode.getDirectCompositionEdges();
         if(directCompositions != null && directCompositions.size() > 0) {
             ++c.gridy;
@@ -81,6 +89,7 @@ public class BeanNodeEditor extends JPanel {
             }
         }
 
+        //print all compositions that use an adapter
         List<AdapterCompositionEdge> hookupCompositionEdges = beanNode.getAdapterCompositionEdges();
         if(hookupCompositionEdges != null && hookupCompositionEdges.size() > 0) {
             ++c.gridy;
@@ -105,6 +114,7 @@ public class BeanNodeEditor extends JPanel {
             c.insets = topPadding;
         }
 
+        //print all property bindings
         List<PropertyBindingEdge> propertyBindingEdges = beanNode.getPropertyBindingEdges();
         if(propertyBindingEdges != null && propertyBindingEdges.size() > 0) {
             ++c.gridy;

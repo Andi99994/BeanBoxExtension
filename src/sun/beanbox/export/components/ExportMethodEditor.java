@@ -17,20 +17,37 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 /**
- * Created by Andi on 22.06.2017.
+ * Created by Andreas on 22.06.2017.
+ *
+ * This class represents the view to customise the ExportMethods during exporting.
  */
 public class ExportMethodEditor extends JPanel {
 
+    /**
+     * This constructs all UI elements required to customise an ExportMethod.
+     *
+     * @param exporter the exporter component
+     * @param exportMethod the ExportMethod to be customised
+     * @param tree the TreeView to update name changes
+     * @param treeNode the node to be updated on name changes
+     */
     public ExportMethodEditor(Exporter exporter, ExportMethod exportMethod, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
-        ExportBean exportBean = (ExportBean) ((DefaultMutableTreeNode) treeNode.getParent().getParent().getParent()).getUserObject();
+        ExportBean exportBean = null;
+        DefaultMutableTreeNode current = (DefaultMutableTreeNode) treeNode.getParent();
+        while (exportBean == null) {
+            current = (DefaultMutableTreeNode) current.getParent();
+            if (current.getUserObject() instanceof ExportBean) {
+                exportBean = (ExportBean) current.getUserObject();
+            }
+        }
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("The name of the method. It must be unique among all methods and be a valid Java identifier.");
-        TextField nameText = new TextField();
-        nameText.setText(exportMethod.getName());
+        TextField nameText = new TextField(exportMethod.getName());
         JLabel nameCheckLabel = new JLabel(exporter.checkIfValidPropertyName(exportBean, nameText.getText()) ? "Valid name" : "Invalid name");
+        final ExportBean finalExportBean = exportBean;
         nameText.addTextListener(e -> {
-            if (exporter.checkIfValidPropertyName(exportBean, nameText.getText())) {
+            if (exporter.checkIfValidPropertyName(finalExportBean, nameText.getText())) {
                 exportMethod.setName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();

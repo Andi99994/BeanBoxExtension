@@ -9,17 +9,27 @@ import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 
 /**
- * Created by Andi on 22.06.2017.
+ * Created by Andreas on 22.06.2017.
+ *
+ * This class represents the view to customise the ExportBeans during exporting.
  */
 public class ExportBeanEditor extends JPanel {
 
+    /**
+     * This constructs all UI elements required to customise an ExportBean.
+     *
+     * @param exporter the exporter component
+     * @param exportBean the ExportBean to be customised
+     * @param tree the TreeView to update name changes
+     * @param treeNode the node to be updated on name changes
+     */
     public ExportBeanEditor(Exporter exporter, ExportBean exportBean, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
 
         JLabel name = new JLabel("Name: ");
-        name.setToolTipText("Configure the name of the bean. The name must be a valid Java identifier and must not be a keyword.");
-        TextField nameText = new TextField();
-        nameText.setText(exportBean.getBeanName());
+        name.setToolTipText("Configure the name of the bean. The name must be a valid Java identifier and must not be a keyword. " +
+                "Pay attention that it does not conflict with any resources that you are including.");
+        TextField nameText = new TextField(exportBean.getBeanName());
         JLabel nameCheckLabel = new JLabel(exporter.checkIfValidClassName(nameText.getText()) ? "Valid name" : "Invalid name");
         nameText.addTextListener(e -> {
             if (exporter.checkIfValidClassName(nameText.getText())) {

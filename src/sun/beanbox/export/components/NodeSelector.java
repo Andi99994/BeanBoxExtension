@@ -10,24 +10,32 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Created by Andi on 05.06.2017.
+ * Created by Andreas on 05.06.2017.
+ *
+ * This class is a simple selection list to select input or output nodes if we cant infer them from the structure.
  */
 public class NodeSelector extends JDialog {
 
+    /**
+     * Constructs all UI elements required to display a selection list.
+     *
+     * @param owner the frame that calls this component
+     * @param availableNodes all BeanNodes that are eligible to be an input or output node
+     * @param message the text to be displayed on the top
+     */
     public NodeSelector(Frame owner, List<BeanNode> availableNodes, String message) {
         super(owner, "Select Beans", true);
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent windowEvent) {
-                int result = showExitDialog();
-                if (result == JOptionPane.YES_OPTION) {
+                if (showExitDialog() == JOptionPane.YES_OPTION) {
                     availableNodes.clear();
                     dispose();
                 }
             }
         });
-        this.setLayout(new BorderLayout());
-        this.add(new Label(message), BorderLayout.PAGE_START);
+        setLayout(new BorderLayout());
+        add(new Label(message), BorderLayout.PAGE_START);
         JList list = new JList(availableNodes.toArray());
         list.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         list.setLayoutOrientation(JList.VERTICAL_WRAP);
@@ -37,8 +45,7 @@ public class NodeSelector extends JDialog {
         JScrollPane listScroller = new JScrollPane(list);
         listScroller.setPreferredSize(new Dimension(250, 80));
         this.add(listScroller, BorderLayout.CENTER);
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         Button exportButton = new Button("Accept");
         exportButton.addActionListener(e -> {
             List<BeanNode> selectedNodes = new LinkedList<>();
@@ -63,10 +70,18 @@ public class NodeSelector extends JDialog {
         this.setSize(new Dimension(800, 600));
     }
 
+    /**
+     * Show a confirmation dialog to avoid accidental cancelling of the export.
+     *
+     * @return returns a value depending on the users selection
+     */
     private int showExitDialog() {
         return JOptionPane.showConfirmDialog(null, "You must select your input and output Beans. Do you want to cancel the export?", "Cancel", JOptionPane.YES_NO_OPTION);
     }
 
+    /**
+     * A custom cell renderer to display BeanNodes.
+     */
     class BeanNodeCellRenderer extends JLabel implements ListCellRenderer {
         private final Color HIGHLIGHT_COLOR = new Color(0, 0, 128);
 

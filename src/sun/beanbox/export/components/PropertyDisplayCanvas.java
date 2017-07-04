@@ -9,19 +9,33 @@ import java.beans.PropertyEditorManager;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * Created by Andi on 20.06.2017.
+ * Created by Andreas on 20.06.2017.
+ *
+ * This is a Canvas to print the values of properties. It uses the paintValue or
+ * getAsText method of the PropertyDescriptor.
  */
 public class PropertyDisplayCanvas extends Canvas {
 
     private PropertyEditor editor;
 
-    public PropertyDisplayCanvas(int width, int height, ExportProperty property, PropertyValueType valueType) throws InvocationTargetException, IllegalAccessException {
+    /**
+     * Constructs all UI elements required to display a property.
+     *
+     * @param width defines the width of the property display box
+     * @param height defines the height of the property display box
+     * @param property the ExportProperty to be displayed
+     * @throws InvocationTargetException if there is an error accessing the property
+     * @throws IllegalAccessException if there is an error accessing the property
+     */
+    public PropertyDisplayCanvas(int width, int height, ExportProperty property) throws InvocationTargetException, IllegalAccessException {
         setMaximumSize(new Dimension(width, height));
-        setSize(width, height);
+        setSize(new Dimension(width, height));
         setPreferredSize(new Dimension(width, height));
         setMinimumSize(new Dimension(width, height));
+
+        //code taken and adapted from PropertySheet. Unfortunately there was no reusability.
         PropertyDescriptor propertyDescriptor = property.getPropertyDescriptor();
-        Object value = valueType == PropertyValueType.CURRENT_VALUE ? property.getCurrentValue() : property.getDefaultValue();
+        Object value = property.getCurrentValue();
         Class pec = propertyDescriptor.getPropertyEditorClass();
         if (pec != null) {
             try {
