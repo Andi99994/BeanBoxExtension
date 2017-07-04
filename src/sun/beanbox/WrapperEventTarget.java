@@ -1,5 +1,6 @@
 package sun.beanbox;
 
+import java.beans.EventSetDescriptor;
 import java.io.Serializable;
 
 // Class to hold state on event listener hookup for which this

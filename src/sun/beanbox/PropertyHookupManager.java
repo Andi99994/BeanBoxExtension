@@ -43,7 +43,7 @@ class PropertyHookupManager {
             sourceWrapper.addEventTarget("propertyChange", null, hook, null);
         }
 
-        sourceWrapper.addPropertyTarget(propertyName, targetObject, setter);
+        sourceWrapper.addPropertyTarget(propertyName, targetObject, setter, hook);
         hook.attach(source, propertyName, getter, targetObject, setter);
     }
 

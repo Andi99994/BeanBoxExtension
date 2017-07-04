@@ -126,7 +126,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
 
                         back.addElement(new WrapperPropertyEventInfo(h
                                 .getTargetObject(t), propertyName, h
-                                .getSetterMethod(t)));
+                                .getSetterMethod(t), h));
                     }
                 }
             }
@@ -203,9 +203,9 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
 
     // Add a (set of) PropertyHookup
     synchronized void addPropertyTarget(String propertyName,
-                                        Object targetObject, Method setter) {
+                                        Object targetObject, Method setter, PropertyHookup hookup) {
         propertyTargets.addElement(new WrapperPropertyEventInfo(targetObject,
-                propertyName, setter));
+                propertyName, setter, hookup));
     }
 
     // Add a hookup. All property bound hookups are represented by (at most) one
@@ -1090,12 +1090,12 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
         return listeners;
     }
 
-    public List<Object> getPropertyTargets() {
-        List<Object> listeners = new ArrayList<>();
+    public List<WrapperPropertyEventInfo> getPropertyTargets() {
+        List<WrapperPropertyEventInfo> listeners = new ArrayList<>();
         for (Object propertyTarget : propertyTargets) {
             WrapperPropertyEventInfo target = (WrapperPropertyEventInfo) propertyTarget;
             if (target.targetBean != null) {
-                listeners.add(target.targetBean);
+                listeners.add(target);
             }
         }
         return listeners;

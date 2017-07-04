@@ -202,7 +202,7 @@ public class HookupManager {
         String pathToFile = tmpDir+java.io.File.separatorChar+className+".class";
         Vector result = new Vector();
         result.add(pathToFile);
-        result.add(hookup.getAbsolutePath());
+        result.add(hookup.getAbsolutePath().replaceAll("java$", "class"));
         return result;
     }
 
@@ -255,6 +255,10 @@ public class HookupManager {
         } catch (Exception ex) {
             throw new Error("findMethod caught : " + ex);
         }
+    }
+
+    public static String getTmpDir() {
+        return tmpDir;
     }
 
     static String shortPackageName = "sunw.beanbox";
