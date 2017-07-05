@@ -18,6 +18,7 @@ import java.beans.*;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -203,7 +204,29 @@ public class Exporter {
         //add all methods eligible for export. It is highly suggested to define these in a BeanInfo as otherwise there are going to be a lot
         //also we check if the class or any superclass implements any EventListener interface for one of these methods.
         for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
-            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")) {
+            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")
+                    && !methodDescriptor.getName().equals("getClass") && !methodDescriptor.getName().equals("getPeer")
+                    && !methodDescriptor.getName().equals("notify") && !methodDescriptor.getName().equals("wait")
+                    && !methodDescriptor.getName().equals("notifyAll") && methodDescriptor.getMethod().getReturnType().equals(Void.TYPE)) {
+                Method checkMethod = methodDescriptor.getMethod();
+                boolean addMethod = true;
+                for (ExportMethod exportMethod : beanNode.getMethods()) {
+                    Method method = exportMethod.getMethodDescriptor().getMethod();
+                    if (method.getName().equals(checkMethod.getName()) && Arrays.equals(checkMethod.getParameterTypes(), method.getParameterTypes())) {
+                        addMethod = false;
+                        break;
+                    }
+                }
+                for (ExportProperty exportProperty : beanNode.getProperties()) {
+                    Method getter = exportProperty.getPropertyDescriptor().getReadMethod();
+                    Method setter = exportProperty.getPropertyDescriptor().getWriteMethod();
+                    if ((getter.getName().equals(checkMethod.getName()) && Arrays.equals(checkMethod.getParameterTypes(), getter.getParameterTypes())) ||
+                            (setter.getName().equals(checkMethod.getName()) && Arrays.equals(checkMethod.getParameterTypes(), setter.getParameterTypes()))) {
+                        addMethod = false;
+                        break;
+                    }
+                }
+                if(!addMethod) continue;
                 List<Class> classTree = new ArrayList<>(getAllExtendedOrImplementedTypes(beanNode.getData().getClass()));
                 List<Class> declaringInterfaces = new ArrayList<>();
                 for (Class cls : classTree) {
@@ -909,7 +932,7 @@ public class Exporter {
             writer.println("\t\t\tClass cls = " + exportBean.getBeanName() + ".class;");
             StringBuilder propertyDescriptorArray = new StringBuilder("{");
             for (ExportProperty exportProperty : exportProperties) {
-                String descriptorName = "pd" + exportProperty.uppercaseFirst();
+                String descriptorName = generateIdentifierName("pd" + exportProperty.uppercaseFirst());
                 writer.println("\t\t\tPropertyDescriptor " + descriptorName + " = new PropertyDescriptor(\"" + exportProperty.getName() + "\", cls);");
                 writer.println("\t\t\t" + descriptorName + ".setDisplayName(\"" + exportProperty.getPropertyDescriptor().getDisplayName() + "\");");
                 if (exportProperty.getPropertyDescriptor().getPropertyEditorClass() != null) {
@@ -950,7 +973,7 @@ public class Exporter {
                         listenerMethodsArray.append("\"").append(method.getName()).append("\"");
                     }
                 }
-                String descriptorName = "esd" + exportEvent.uppercaseFirst();
+                String descriptorName = generateIdentifierName("esd" + exportEvent.uppercaseFirst());
                 writer.println("\t\t\tEventSetDescriptor " + descriptorName + " = new EventSetDescriptor(cls, \"" + exportEvent.getName() + "\", "
                         + exportEvent.getEventSetDescriptor().getListenerType().getCanonicalName() + ".class, new String[]" + listenerMethodsArray.toString() + "}, " +
                         "\"add" + exportEvent.uppercaseFirst() + "EventListener\", \"remove" + exportEvent.uppercaseFirst() + "EventListener\");");
@@ -986,7 +1009,7 @@ public class Exporter {
                         classArray.append(parameter.getCanonicalName()).append(".class");
                     }
                 }
-                String descriptorName = "md" + exportMethod.uppercaseFirst();
+                String descriptorName = generateIdentifierName("md" + exportMethod.uppercaseFirst());
                 writer.println("\t\t\tMethodDescriptor " + descriptorName + " = new MethodDescriptor(cls.getMethod(\"" + exportMethod.getName()
                         + "\", new Class[]" + classArray + "}), null);");
                 if (methodDescriptorArray.length() > 1) {
@@ -1089,6 +1112,12 @@ public class Exporter {
     private List<ExportProperty> sortPropertiesByBinding(List<ExportProperty> properties) {
         //TODO: think
         return properties;
+    }
+
+    private String generateIdentifierName(String prefix) {
+        Random rand = new Random();
+        int random = 10000 + rand.nextInt(90000);
+        return prefix + random;
     }
 
     private String generateAdapterName() {
