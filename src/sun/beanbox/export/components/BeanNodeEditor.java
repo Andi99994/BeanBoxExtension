@@ -1,11 +1,11 @@
 package sun.beanbox.export.components;
 
-import sun.beanbox.export.datastructure.BeanNode;
-import sun.beanbox.export.datastructure.DirectCompositionEdge;
-import sun.beanbox.export.datastructure.AdapterCompositionEdge;
-import sun.beanbox.export.datastructure.PropertyBindingEdge;
+import sun.beanbox.export.Exporter;
+import sun.beanbox.export.datastructure.*;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 import java.util.List;
 
@@ -19,15 +19,39 @@ public class BeanNodeEditor extends JPanel {
     /**
      * This constructs all UI elements required to customise a BeanNode.
      *
+     * @param exporter the exporter component
      * @param beanNode the BeanNode to be customised
+     * @param tree the TreeView to update name changes
+     * @param treeNode the node to be updated on name changes
      */
-    public BeanNodeEditor(BeanNode beanNode) {
+    public BeanNodeEditor(Exporter exporter, BeanNode beanNode, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
 
         Font plainFont = new Font("Dialog", Font.PLAIN, 12);
+        ExportBean exportBean = null;
+        DefaultMutableTreeNode current = treeNode;
+        while (exportBean == null) {
+            current = (DefaultMutableTreeNode) current.getParent();
+            if (current.getUserObject() instanceof ExportBean) {
+                exportBean = (ExportBean) current.getUserObject();
+            }
+        }
         JLabel name = new JLabel("Name: ");
-        JLabel nameText = new JLabel(beanNode.getName());
-        nameText.setFont(plainFont);
+        name.setToolTipText("The name of the bean. It must be unique among all beans in this ExportBean and be a valid Java identifier.");
+        TextField nameText = new TextField(beanNode.getName());
+        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidPropertyName(exportBean, nameText.getText()) ? "Valid name" : "Invalid name");
+        final ExportBean finalExportBean = exportBean;
+        nameText.addTextListener(e -> {
+            if (exporter.checkIfValidPropertyName(finalExportBean, nameText.getText())) {
+                beanNode.setName(nameText.getText());
+                nameCheckLabel.setText("Valid name");
+                DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
+                model.nodeChanged(treeNode);
+            } else {
+                nameCheckLabel.setText("Invalid name");
+            }
+        });
+        nameText.setColumns(22);
         JLabel directCompositionsLabel = new JLabel("Direct Compositions:");
         JLabel hookupCompositions = new JLabel("Adapter Compositions:");
         JLabel propertyBindings = new JLabel("Property Bindings:");
@@ -58,13 +82,15 @@ public class BeanNodeEditor extends JPanel {
         c.weightx = 80;
         add(nameText, c);
         c.gridy = 1;
+        add(nameCheckLabel, c);
+        c.gridy = 2;
         c.gridx = 0;
         c.gridwidth = 2;
         c.insets = topPadding;
         add(manifest, c);
-        c.gridy = 2;
-        add(input, c);
         c.gridy = 3;
+        add(input, c);
+        c.gridy = 4;
         add(output, c);
         //print all direct compositions
         List<DirectCompositionEdge> directCompositions = beanNode.getDirectCompositionEdges();

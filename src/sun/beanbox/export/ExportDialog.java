@@ -47,6 +47,8 @@ public class ExportDialog extends JDialog {
         setLayout(new BorderLayout());
         add(getBeansPanel(), BorderLayout.CENTER);
 
+        JLabel statusLabel = new JLabel("");
+        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton exportButton = new JButton("Export");
         exportButton.addActionListener(e -> {
@@ -62,19 +64,21 @@ public class ExportDialog extends JDialog {
                         //Display information about the running process to the user.
                         SwingUtilities.invokeLater(() -> {
                             final JPanel panel = new JPanel(new BorderLayout());
-                            panel.add(new JLabel("Generating Beans. This could take a few moments.", SwingConstants.CENTER), BorderLayout.CENTER);
+                            panel.add(new JLabel("Please wait a few moments.", SwingConstants.CENTER), BorderLayout.CENTER);
                             setGlassPane(panel);
                             panel.setVisible(true);
                             panel.setOpaque(false);
                             for (Component component : getComponents()) {
                                 component.setEnabled(false);
                             }
+                            statusLabel.setText("Generating...");
                         });
                         setEnabled(false);
                         //Start the exporting process.
                         try {
                             exporter.export(fd.getDirectory(), fd.getFile());
                         } catch (Exception ex) {
+                            ex.printStackTrace();
                             SwingUtilities.invokeLater(() -> new ErrorDialog(owner, ex.getMessage()));
                         }
 
@@ -83,12 +87,14 @@ public class ExportDialog extends JDialog {
                             for (Component component : getComponents()) {
                                 component.setEnabled(false);
                             }
-                            dispose();
+                            setEnabled(true);
+                            statusLabel.setText("Finished!");
                         });
                     });
 
                     worker.start();
                 } catch (Exception ex) {
+                    ex.printStackTrace();
                     new ErrorDialog(owner, ex.getMessage());
                 }
             }
@@ -100,6 +106,13 @@ public class ExportDialog extends JDialog {
                 dispose();
             }
         });
+
+        JCheckBox keepSources = new JCheckBox("Keep sources");
+        keepSources.setSelected(exporter.isKeepSources());
+        keepSources.setToolTipText("Select whether the temporary folder that is created during export should be deleted afterwards or not.");
+        keepSources.addActionListener(e -> exporter.setKeepSources(keepSources.isSelected()));
+        buttonPanel.add(statusLabel);
+        buttonPanel.add(keepSources);
         buttonPanel.add(exportButton);
         buttonPanel.add(cancelButton);
         add(buttonPanel, BorderLayout.PAGE_END);
@@ -211,7 +224,7 @@ public class ExportDialog extends JDialog {
                 panel.setViewportView(new ExportBeanEditor(exporter, (ExportBean) treeNode.getUserObject(), tree, treeNode));
                 return;
             } else if (treeNode.getUserObject() instanceof BeanNode) {
-                panel.setViewportView(new BeanNodeEditor((BeanNode) treeNode.getUserObject()));
+                panel.setViewportView(new BeanNodeEditor(exporter, (BeanNode) treeNode.getUserObject(), tree, treeNode));
                 return;
             } else if (treeNode.getUserObject() instanceof ExportProperty) {
                 panel.setViewportView(new ExportPropertyEditor(exporter, (ExportProperty) treeNode.getUserObject(), tree, treeNode));

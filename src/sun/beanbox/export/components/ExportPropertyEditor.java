@@ -33,7 +33,7 @@ public class ExportPropertyEditor extends JPanel {
     public ExportPropertyEditor(Exporter exporter, ExportProperty exportProperty, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
         ExportBean exportBean = null;
-        DefaultMutableTreeNode current = (DefaultMutableTreeNode) treeNode.getParent();
+        DefaultMutableTreeNode current = treeNode;
         while (exportBean == null) {
             current = (DefaultMutableTreeNode) current.getParent();
             if (current.getUserObject() instanceof ExportBean) {

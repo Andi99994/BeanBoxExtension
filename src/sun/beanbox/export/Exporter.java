@@ -1,5 +1,6 @@
 package sun.beanbox.export;
 
+import org.apache.commons.io.FileUtils;
 import sun.beanbox.HookupManager;
 import sun.beanbox.Wrapper;
 import sun.beanbox.WrapperEventTarget;
@@ -17,6 +18,11 @@ import java.beans.*;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -25,9 +31,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 
+import static java.nio.file.FileVisitResult.CONTINUE;
+import static java.nio.file.FileVisitResult.TERMINATE;
+
 /**
  * Created by Andreas on 06.05.2017.
- *
+ * <p>
  * This is the main component responsible for the export process. It first converts all selected Wrapper objects into
  * a better suited datastructure, a directed graph, that contains all relevant information. Any changes made to the
  * configuration will affect how the bean will be generated.
@@ -38,11 +47,13 @@ public class Exporter {
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
     private Set<String> reservedPropertyNames = new HashSet<>();
+    private boolean keepSources = false;
 
     private String tmpDirectoryName = "/tmp";
-    private static final String DEFAULT_BEAN_PACKAGE_NAME = "beanBox/generated/beans";
-    private static final String DEFAULT_SERIALIZED_PROPERTIES_PACKAGE_NAME = "beanBox/generated/beans/properties";
-    private static final String DEFAULT_ADAPTER_PACKAGE_NAME = "beanBox/generated/beans/adapters";
+    private static final String DEFAULT_MANIFEST_DIRECTORY_NAME = "META-INF";
+    private static final String DEFAULT_BEAN_DIRECTORY_NAME = "beanBox/generated/beans";
+    private static final String DEFAULT_SERIALIZED_PROPERTIES_DIRECTORY_NAME = "beanBox/generated/beans/properties";
+    private static final String DEFAULT_ADAPTER_DIRECTORY_NAME = "beanBox/generated/beans/adapters";
 
     private static final String DEFAULT_BEAN_NAME = "ExportBean";
 
@@ -51,16 +62,24 @@ public class Exporter {
      * datastructure.
      *
      * @param beans the beans that were selected for export
-     * @throws IntrospectionException if there is an error reading bean information
-     * @throws IllegalArgumentException if there is an error accessing bean properties
+     * @throws IntrospectionException    if there is an error reading bean information
+     * @throws IllegalArgumentException  if there is an error accessing bean properties
      * @throws InvocationTargetException if there is an error accessing bean properties
-     * @throws IllegalAccessException if there is an error accessing bean properties
+     * @throws IllegalAccessException    if there is an error accessing bean properties
      */
     public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
         reservedPropertyNames.add("propertyChange");
         for (List<Wrapper> group : groupWrappers(beans)) {
             exportBeans.add(assembleExportBean(group, DEFAULT_BEAN_NAME + exportBeans.size()));
         }
+    }
+
+    public boolean isKeepSources() {
+        return keepSources;
+    }
+
+    public void setKeepSources(boolean keepSources) {
+        this.keepSources = keepSources;
     }
 
     public List<ExportBean> getBeans() {
@@ -133,12 +152,12 @@ public class Exporter {
      * This information can be changed later, but an initial configuration is required to construct the graph.
      *
      * @param wrappers a list of Wrappers that should be converted into an ExportBean
-     * @param name the name of the ExportBean
+     * @param name     the name of the ExportBean
      * @return returns an ExportBean containing all important information
-     * @throws IntrospectionException if there is an error reading bean information
-     * @throws IllegalArgumentException if there is an error reading properties
+     * @throws IntrospectionException    if there is an error reading bean information
+     * @throws IllegalArgumentException  if there is an error reading properties
      * @throws InvocationTargetException if there is an error reading properties
-     * @throws IllegalAccessException if there is an error reading properties
+     * @throws IllegalAccessException    if there is an error reading properties
      */
     private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
@@ -155,12 +174,12 @@ public class Exporter {
      * Recursively converts Wrappers into BeanNodes. While doing so, all required information is gathered and also
      * converted.
      *
-     * @param wrapper the Wrapper to convert.
+     * @param wrapper      the Wrapper to convert.
      * @param createdNodes all BeanNodes of an ExportBean that have already been created. This is needed to deal with cyclic composition.
      * @return returns a BeanNode
-     * @throws IntrospectionException if there is an error reading bean information
+     * @throws IntrospectionException    if there is an error reading bean information
      * @throws InvocationTargetException if there is an error reading properties
-     * @throws IllegalAccessException if there is an error reading properties
+     * @throws IllegalAccessException    if there is an error reading properties
      */
     private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException {
         //avoid following cyclic references
@@ -280,6 +299,7 @@ public class Exporter {
      * Checks if a String is a valid name for an ExportBean. It may not be empty, must not exceed 32 characters, be a valid Java identifier,
      * must not be a Java keyword and it must be unique among all ExportBeans in a single export. Additionally the String may not conflict
      * with any resources required to build the JAR file -> This is NOT checked here.
+     *
      * @param text the text to be checked
      * @return returns if the name is valid
      */
@@ -299,7 +319,8 @@ public class Exporter {
      * Checks if a String is a valid name for an ExportProperty. It may not be empty, must not exceed 32 characters, be a valid Java identifier,
      * must not be a Java keyword and it must be unique among all ExportProperties in a single ExportBean. Additionally the String may not conflict
      * with any generated method or event names.
-     * @param text the text to be checked
+     *
+     * @param text       the text to be checked
      * @param exportBean the exportBean to which the property belongs
      * @return returns if the name is valid
      */
@@ -312,88 +333,146 @@ public class Exporter {
         return true;
     }
 
+    /**
+     * This method initiates the export process itself. Upon calling, temporary directories will be generated, resources
+     * collected, and all necessary classes generated and compiled. This temporary directory will then be packed into a
+     * JAR file.
+     *
+     * @param directory The directory where the bean and the temporary directories should be generated.
+     * @param filename  the name of the JAR
+     * @throws Exception if there is any error during generation, compilation or packing there are quite a few exceptions
+     *                   thrown so we just throw a generic exception since we don't really differentiate between them anyway. In every case
+     *                   the export process failed and we have to cancel it and display the error information.
+     */
     public void export(String directory, String filename) throws Exception {
-        try {
-            String[] filenameSplit = filename.split(Pattern.quote("."));
-            if (!filenameSplit[filenameSplit.length - 1].equals("jar")) filename += ".jar";
-            File target = new File(directory, filename);
-            int counter = 0;
-            while (new File(directory + tmpDirectoryName + counter).isDirectory()) {
-                counter++;
-            }
-            tmpDirectoryName += counter;
-            if (validateConfiguration() == null) {
-                File tmpDirectory = new File(directory + tmpDirectoryName);
-                File tmpBeanDirectory = new File(tmpDirectory.getAbsolutePath() + "/" + DEFAULT_BEAN_PACKAGE_NAME);
-                File tmpPropertiesDirectory = new File(tmpDirectory.getAbsolutePath() + "/" + DEFAULT_SERIALIZED_PROPERTIES_PACKAGE_NAME);
-                File tmpManifestDirectory = new File(tmpDirectory.getAbsolutePath() + "/META-INF");
-                File tmpAdapterDirectory = new File(tmpDirectory.getAbsolutePath() + "/" + DEFAULT_ADAPTER_PACKAGE_NAME);
-                if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
-                    ArrayList<File> resources = collectResources();
-                    copyAndExtractResources(tmpDirectory, resources);
-                    resources.addAll(generatePropertyAdapters(tmpAdapterDirectory));
-                    for (ExportBean exportBean : exportBeans) {
-                        generateBean(tmpDirectory, tmpBeanDirectory, tmpPropertiesDirectory, tmpAdapterDirectory, exportBean);
-                    }
-                    generateManifest(tmpManifestDirectory);
-                    compileSources(tmpBeanDirectory, resources);
-                    packJar(target, tmpDirectory);
-                    //TODO: delete tmpFiles
-                } else {
-                    throw new IOException("Error creating temporary directories at: " + directory);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (!filename.endsWith(".jar")) filename += ".jar";
+        File target = new File(directory, filename);
+        int counter = 0;
+        while (new File(directory + tmpDirectoryName + counter).exists()) {
+            counter++;
         }
+        tmpDirectoryName += counter;
+        if (validateConfiguration() == null) {
+            File tmpDirectory = new File(directory + tmpDirectoryName);
+            File tmpBeanDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_BEAN_DIRECTORY_NAME);
+            File tmpPropertiesDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_SERIALIZED_PROPERTIES_DIRECTORY_NAME);
+            File tmpManifestDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_MANIFEST_DIRECTORY_NAME);
+            File tmpAdapterDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_ADAPTER_DIRECTORY_NAME);
 
+            if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
+                ArrayList<File> resources = collectResources();
+                copyAndExtractResources(tmpDirectory, resources);
+                resources.addAll(generatePropertyAdapters(tmpAdapterDirectory));
+                for (ExportBean exportBean : exportBeans) {
+                    generateBean(tmpDirectory, tmpBeanDirectory, tmpPropertiesDirectory, tmpAdapterDirectory, exportBean);
+                }
+                generateManifest(tmpManifestDirectory);
+                compileSources(tmpBeanDirectory, resources);
+                packJar(target, tmpDirectory);
+                if (!keepSources) {
+                    deleteDirectory(tmpDirectory.toPath());
+                }
+            } else {
+                throw new IOException("Error creating temporary directories at: " + directory);
+            }
+        }
     }
 
-    private List<File> generatePropertyAdapters(File tmpAdapterDirectory) throws IOException, NoSuchMethodException {
-        List<File> adapters = new ArrayList<>();
+    /**
+     * This method analyzes all ExportBeans and collects any necessary dependencies. These are the JAR files of the BeanNodes
+     * and any adapters if there are adapter compositions. This method could be optimized by already detecting conflicts so
+     * we can interrupt earlier etc...
+     *
+     * @return returns a List of all necessary resources as files
+     * @throws IOException if a file can not be found or there is an error reading the files
+     */
+    private ArrayList<File> collectResources() throws IOException {
+        ArrayList<File> res = new ArrayList<>();
         for (ExportBean exportBean : exportBeans) {
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
-                    adapters.add(generatePropertAdapter(tmpAdapterDirectory, edge));
+                File resource = new File(node.getJarPath());
+                if (resource.isFile()) {
+                    if (!contentEquals(resource, res)) {
+                        res.add(resource);
+                    }
+                } else {
+                    throw new IOException("Source file not found or invalid: " + node.getJarPath());
+                }
+                for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
+                    File edgeResource = new File(edge.getAdapterClassPath());
+                    if (edgeResource.isFile()) {
+                        if (!contentEquals(edgeResource, res)) {
+                            res.add(edgeResource);
+                        }
+                    } else {
+                        throw new IOException("Source file not found or invalid: " + edge.getAdapterClassPath());
+                    }
                 }
             }
         }
-        return adapters;
+        return res;
     }
 
-    private void copyAndExtractResources(File tmpDirectory, Collection<File> resources) throws IOException {
+    /**
+     * Checks if a file has the same content as any file in a given list of files. This uses Apache Commons IO for
+     * determining equality.
+     *
+     * @param testFile  the file to be tested
+     * @param resources the list of files that are to be checked against
+     * @return returns if a file with equal content is already in the list
+     * @throws IOException if there is an error reading the files
+     */
+    private static boolean contentEquals(File testFile, ArrayList<File> resources) throws IOException {
+        for (File res : resources) {
+            if (FileUtils.contentEquals(res, testFile)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * This method copies all specified resources to the specified directory. JAR files will additionally be extracted
+     * into the target directory while keeping the package structure. All other file types will be copied as is.
+     *
+     * @param targetDirectory the directory to copy all resources to
+     * @param resources       the files that are being copied and extracted
+     * @throws IOException if there is an error copying or extracting
+     */
+    private void copyAndExtractResources(File targetDirectory, Collection<File> resources) throws IOException {
+        if (!targetDirectory.isDirectory()) {
+            throw new IOException("Could not copy resource files: Target is not a directory.");
+        }
         for (File resource : resources) {
             if (resource.getName().toLowerCase().endsWith(".jar")) {
                 JarFile jarfile = new JarFile(resource);
                 Enumeration<JarEntry> enu = jarfile.entries();
                 while (enu.hasMoreElements()) {
                     JarEntry je = enu.nextElement();
-                    File fl = new File(tmpDirectory.getAbsolutePath(), je.getName());
+                    File fl = new File(targetDirectory.getAbsolutePath(), je.getName());
                     if (!fl.exists()) {
                         fl.getParentFile().mkdirs();
-                        fl = new File(tmpDirectory.getAbsolutePath(), je.getName());
+                        fl = new File(targetDirectory.getAbsolutePath(), je.getName());
                     }
+                    //exclude any Manifest files to avoid very likely conflicts
                     if (je.isDirectory() || je.getName().toUpperCase().contains("MANIFEST.MF")) {
                         continue;
                     }
-                    InputStream is = jarfile.getInputStream(je);
-                    FileOutputStream fo = new FileOutputStream(fl);
-                    while (is.available() > 0) {
-                        fo.write(is.read());
+                    try (InputStream in = jarfile.getInputStream(je); FileOutputStream out = new FileOutputStream(fl)) {
+                        byte[] buf = new byte[1024];
+                        int length;
+                        while ((length = in.read(buf)) > 0) {
+                            out.write(buf, 0, length);
+                        }
                     }
-                    fo.close();
-                    is.close();
                 }
             } else {
-                File file = new File(tmpDirectory.getAbsolutePath(), HookupManager.getTmpDir() + File.separator + resource.getName());
+                File file = new File(targetDirectory.getAbsolutePath(), HookupManager.getTmpDir() + File.separator + resource.getName());
                 if (!file.exists()) {
                     file.getParentFile().mkdirs();
-                    file = new File(tmpDirectory.getAbsolutePath(), HookupManager.getTmpDir() + File.separator + resource.getName());
+                    file = new File(targetDirectory.getAbsolutePath(), HookupManager.getTmpDir() + File.separator + resource.getName());
                 }
-                try (
-                        InputStream in = new FileInputStream(resource);
-                        OutputStream out = new FileOutputStream(file)
-                ) {
+                try (InputStream in = new FileInputStream(resource); OutputStream out = new FileOutputStream(file)) {
                     byte[] buf = new byte[1024];
                     int length;
                     while ((length = in.read(buf)) > 0) {
@@ -402,8 +481,94 @@ public class Exporter {
                 }
             }
         }
+    }
 
+    /**
+     * CAUTION! This method deletes a directory and all its contents.
+     *
+     * @param path the path to the directory to be deleted
+     * @throws IOException if there is an error deleting
+     */
+    private static void deleteDirectory(final Path path) throws IOException {
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return CONTINUE;
+            }
 
+            @Override
+            public FileVisitResult visitFileFailed(final Path file, final IOException e) {
+                return TERMINATE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(final Path dir, final IOException e) throws IOException {
+                if (e != null) return TERMINATE;
+                Files.delete(dir);
+                return CONTINUE;
+            }
+        });
+    }
+
+    /**
+     * Unfortunately the BeanBox does not use the direct way of binding but rather uses adapters
+     * for this task. To be able to offer the same functionality as the BeanBox does (that is not prohibiting
+     * property bindings where the BeanBox allows them) we need to generate adapter classes. These are very similar to the
+     * hookups that the BeanBox generates for adapter composition.
+     *
+     * @param targetDirectory the directory where to generate the adapters
+     * @return returns a list of files of the adapter classes
+     * @throws IOException if there is an error writing the adapters
+     */
+    private List<File> generatePropertyAdapters(File targetDirectory) throws IOException {
+        List<File> adapters = new ArrayList<>();
+        for (ExportBean exportBean : exportBeans) {
+            for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+                for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
+                    adapters.add(generatePropertyAdapter(targetDirectory, edge));
+                }
+            }
+        }
+        return adapters;
+    }
+
+    private File generatePropertyAdapter(File targetDirectory, PropertyBindingEdge propertyBindingEdge) throws IOException {
+        File adapter = new File(targetDirectory, generateAdapterName() + ".java");
+        while (adapter.exists()) {
+            adapter = new File(targetDirectory, generateAdapterName() + ".java");
+        }
+        if (!adapter.createNewFile()) throw new IOException("Error creating File: " + adapter.getName());
+        propertyBindingEdge.setAdapterName(adapter.getName().replace(".java", ""));
+        PrintWriter writer = new PrintWriter(new FileWriter(adapter));
+        writer.println("package " + DEFAULT_ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
+        writer.println();
+        writer.println();
+        writer.println("import java.io.Serializable;");
+        writer.println("import java.beans.PropertyChangeListener;");
+        writer.println("import java.beans.PropertyChangeEvent;");
+        writer.println();
+        writer.println("public class " + propertyBindingEdge.getAdapterName() + " implements PropertyChangeListener, Serializable {");
+        writer.println();
+        writer.println("    private " + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " target;");
+        writer.println();
+        writer.println("    public void setTarget(" + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " t) {");
+        writer.println("        target = t;");
+        writer.println("    }");
+        writer.println();
+        writer.println("    public void propertyChange(PropertyChangeEvent evt) {");
+        writer.println("        try {");
+        writer.println("            target." + propertyBindingEdge.getTargetMethod().getName() + "((" + propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName() + ") evt.getNewValue());");
+        writer.println("        } catch (Exception e) {");
+        writer.println("            e.printStackTrace();");
+        writer.println("        }");
+        writer.println("    }");
+        writer.println("}");
+        writer.close();
+        if (writer.checkError()) {
+            throw new IOException("Error writing Adapter File: " + adapter.getName());
+        }
+        return adapter;
     }
 
     private void packJar(File target, File root) throws IOException {
@@ -457,34 +622,6 @@ public class Exporter {
         return files;
     }
 
-    private ArrayList<File> collectResources() throws IOException {
-        Map<String, File> resources = new HashMap<>();
-        for (ExportBean exportBean : exportBeans) {
-            for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                if (!resources.containsKey(node.getJarPath().substring(node.getJarPath().lastIndexOf('\\') + 1, node.getJarPath().length()))) {
-                    File resource = new File(node.getJarPath());
-                    if (resource.exists()) {
-                        resources.put(node.getJarPath().substring(node.getJarPath().lastIndexOf('\\') + 1, node.getJarPath().length()), resource);
-                    } else {
-                        throw new IOException("Source file not found: " + node.getJarPath());
-                    }
-                }
-                for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
-                    if (!resources.containsKey(edge.getAdapterClassPath().substring(edge.getAdapterClassPath().lastIndexOf('\\') + 1, edge.getAdapterClassPath().length()))) {
-                        File resource = new File(edge.getAdapterClassPath());
-                        if (resource.exists()) {
-                            resources.put(edge.getAdapterClassPath().substring(edge.getAdapterClassPath().lastIndexOf('\\') + 1, edge.getAdapterClassPath().length()), resource);
-                        } else {
-                            throw new IOException("Source file not found: " + edge.getAdapterClassPath());
-                        }
-                    }
-                }
-            }
-        }
-
-        return new ArrayList<>(resources.values());
-    }
-
     private void generateManifest(File manifestDirectory) throws IOException {
         File manifest = new File(manifestDirectory.getAbsolutePath(), "MANIFEST.MF");
         if (!manifest.createNewFile()) throw new IOException("Error creating File: " + manifest.getName());
@@ -492,7 +629,7 @@ public class Exporter {
         writer.println("Manifest-Version: 1.0");
         writer.println();
         for (ExportBean exportBean : exportBeans) {
-            writer.println("Name: " + DEFAULT_BEAN_PACKAGE_NAME + "/" + exportBean.getBeanName() + ".class");
+            writer.println("Name: " + DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getBeanName() + ".class");
             writer.println("Java-Bean: True");
             writer.println();
             for (BeanNode beanNode : exportBean.getBeans().getAllNodes()) {
@@ -527,7 +664,7 @@ public class Exporter {
         if (!bean.createNewFile()) throw new IOException("Error creating File: " + bean.getName());
         if (!beanInfo.createNewFile()) throw new IOException("Error creating File: " + beanInfo.getName());
         PrintWriter writer = new PrintWriter(new FileWriter(bean));
-        writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
+        writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
         writer.println();
         /*Set<String> imports = new HashSet<>();
         for (BeanNode node : exportBean.getBeans().getAllNodes()) {
@@ -601,7 +738,7 @@ public class Exporter {
                 writer.println("        " + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(" + edge.getEnd().lowercaseFirst() + ");");
             }
             for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
-                String canonicalAdaperName = DEFAULT_ADAPTER_PACKAGE_NAME.replace("/", ".") + "." + edge.getAdapterName();
+                String canonicalAdaperName = DEFAULT_ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();
                 writer.println("        " + canonicalAdaperName + " hookup" + hookupCounter + " = new " + canonicalAdaperName + "();");
                 writer.println("        hookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");");
                 writer.println("        " + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");");
@@ -708,7 +845,7 @@ public class Exporter {
             }
             setterSignature.append("{");
             writer.println(setterSignature);
-            if(exportBean.isAddPropertyChangeSupport()) {
+            if (exportBean.isAddPropertyChangeSupport()) {
                 writer.println("\t\tcs.firePropertyChange(\"" + property.getName() + "\", " + property.getNode().lowercaseFirst() + ".get" + property.uppercaseFirst() + "(), arg0);");
             }
             StringBuilder setterCall = new StringBuilder("\t\t").append(property.getNode().lowercaseFirst()).append(".").append(setter.getName()).append("(");
@@ -783,11 +920,11 @@ public class Exporter {
         }
 
         writer = new PrintWriter(new FileWriter(beanInfo));
-        writer.println("package " + DEFAULT_BEAN_PACKAGE_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
+        writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
         writer.println();
         writer.println("import java.beans.*;");
         writer.println("import java.io.Serializable;");
-        if(exportBean.isAddPropertyChangeSupport()) {
+        if (exportBean.isAddPropertyChangeSupport()) {
             writer.println("import java.beans.PropertyChangeListener;");
         }
         writer.println();
@@ -828,7 +965,7 @@ public class Exporter {
             writer.println("        try {");
             writer.println("            Class cls = " + exportBean.getBeanName() + ".class;");
             StringBuilder eventSetDescriptorArray = new StringBuilder("{");
-            if(exportBean.isAddPropertyChangeSupport()) {
+            if (exportBean.isAddPropertyChangeSupport()) {
                 writer.println("            EventSetDescriptor esdPropertyChange = new EventSetDescriptor(cls, \"propertyChange\", PropertyChangeListener.class, \"propertyChange\");");
                 eventSetDescriptorArray.append("esdPropertyChange");
             }
@@ -883,44 +1020,6 @@ public class Exporter {
         if (writer.checkError()) {
             throw new IOException("Error writing BeanInfo File: " + exportBean.getBeanName());
         }
-    }
-
-    private File generatePropertAdapter(File adapterDirectory, PropertyBindingEdge propertyBindingEdge) throws IOException, NoSuchMethodException {
-        File adapter = new File(adapterDirectory, generateAdapterName() + ".java");
-        while (adapter.exists()) {
-            adapter = new File(adapterDirectory, generateAdapterName() + ".java");
-        }
-        if (!adapter.createNewFile()) throw new IOException("Error creating File: " + adapter.getName());
-        propertyBindingEdge.setAdapterName(adapter.getName().replace(".java", ""));
-        PrintWriter writer = new PrintWriter(new FileWriter(adapter));
-        writer.println("package " + DEFAULT_ADAPTER_PACKAGE_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
-        writer.println();
-        writer.println();
-        writer.println("import java.io.Serializable;");
-        writer.println("import java.beans.PropertyChangeListener;");
-        writer.println("import java.beans.PropertyChangeEvent;");
-        writer.println();
-        writer.println("public class " + propertyBindingEdge.getAdapterName() + " implements PropertyChangeListener, Serializable {");
-        writer.println();
-        writer.println("    private " + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " target;");
-        writer.println();
-        writer.println("    public void setTarget(" + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " t) {");
-        writer.println("        target = t;");
-        writer.println("    }");
-        writer.println();
-        writer.println("    public void propertyChange(PropertyChangeEvent evt) {");
-        writer.println("        try {");
-        writer.println("            target." + propertyBindingEdge.getTargetMethod().getName() + "((" + propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName() + ") evt.getNewValue());");
-        writer.println("        } catch (Exception e) {");
-        writer.println("            e.printStackTrace();");
-        writer.println("        }");
-        writer.println("    }");
-        writer.println("}");
-        writer.close();
-        if (writer.checkError()) {
-            throw new IOException("Error writing Adapter File: " + adapter.getName());
-        }
-        return adapter;
     }
 
     private List<ExportProperty> sortPropertiesByBinding(List<ExportProperty> properties) {

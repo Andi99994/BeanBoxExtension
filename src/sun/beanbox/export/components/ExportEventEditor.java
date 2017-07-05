@@ -35,7 +35,7 @@ public class ExportEventEditor extends JPanel {
     public ExportEventEditor(Exporter exporter, ExportEvent exportEvent, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
         ExportBean exportBean = null;
-        DefaultMutableTreeNode current = (DefaultMutableTreeNode) treeNode.getParent();
+        DefaultMutableTreeNode current = treeNode;
         while (exportBean == null) {
             current = (DefaultMutableTreeNode) current.getParent();
             if (current.getUserObject() instanceof ExportBean) {
