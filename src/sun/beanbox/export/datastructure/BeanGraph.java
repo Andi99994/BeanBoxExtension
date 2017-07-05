@@ -31,6 +31,9 @@ public class BeanGraph {
                 }
                 beanName+= counter;
                 node.setName(beanName);
+                for (ExportProperty property : node.getProperties()) {
+                    property.setName(property.getName() + counter);
+                }
             }
             beanNames.add(beanName);
         }

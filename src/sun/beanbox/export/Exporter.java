@@ -67,7 +67,7 @@ public class Exporter {
      * @throws InvocationTargetException if there is an error accessing bean properties
      * @throws IllegalAccessException    if there is an error accessing bean properties
      */
-    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
+    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         reservedPropertyNames.add("propertyChange");
         for (List<Wrapper> group : groupWrappers(beans)) {
             exportBeans.add(assembleExportBean(group, DEFAULT_BEAN_NAME + exportBeans.size()));
@@ -159,7 +159,7 @@ public class Exporter {
      * @throws InvocationTargetException if there is an error reading properties
      * @throws IllegalAccessException    if there is an error reading properties
      */
-    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException {
+    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
             createBeanNode(wrapper, createdNodes);
@@ -181,7 +181,7 @@ public class Exporter {
      * @throws InvocationTargetException if there is an error reading properties
      * @throws IllegalAccessException    if there is an error reading properties
      */
-    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException {
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         //avoid following cyclic references
         if (createdNodes.get(wrapper) != null) {
             return createdNodes.get(wrapper);
@@ -201,9 +201,37 @@ public class Exporter {
             }
         }
         //add all methods eligible for export. It is highly suggested to define these in a BeanInfo as otherwise there are going to be a lot
+        //also we check if the class or any superclass implements any EventListener interface for one of these methods.
         for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
             if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")) {
-                beanNode.getMethods().add(new ExportMethod(methodDescriptor, beanNode));
+                List<Class> classTree = new ArrayList<>(getAllExtendedOrImplementedTypes(beanNode.getData().getClass()));
+                List<Class> declaringInterfaces = new ArrayList<>();
+                for (Class cls : classTree) {
+                    if (cls.isInterface() && EventListener.class.isAssignableFrom(cls)) {
+                        try {
+                            cls.getMethod(methodDescriptor.getMethod().getName(), methodDescriptor.getMethod().getParameterTypes());
+                            declaringInterfaces.add(cls);
+                        } catch (NoSuchMethodException e) {
+                            //Method does not exist
+                        }
+                    }
+                }
+                Class declaringClass = null;
+                for (Class cls : declaringInterfaces) {
+                    boolean add = true;
+                    for (Class cls2 : declaringInterfaces) {
+                        if(cls.equals(cls2)) continue;
+                        if(cls2.isAssignableFrom(cls)){
+                            add = false;
+                            break;
+                        }
+                    }
+                    if (add) {
+                        declaringClass = cls;
+                        break;
+                    }
+                }
+                beanNode.getMethods().add(new ExportMethod(methodDescriptor, beanNode, declaringClass));
             }
         }
         //add all events eligible for export
@@ -364,7 +392,7 @@ public class Exporter {
                 copyAndExtractResources(tmpDirectory, resources);
                 resources.addAll(generatePropertyAdapters(tmpAdapterDirectory));
                 for (ExportBean exportBean : exportBeans) {
-                    generateBean(tmpDirectory, tmpBeanDirectory, tmpPropertiesDirectory, tmpAdapterDirectory, exportBean);
+                    generateBean(tmpBeanDirectory, tmpPropertiesDirectory, exportBean);
                 }
                 generateManifest(tmpManifestDirectory);
                 compileSources(tmpBeanDirectory, resources);
@@ -533,6 +561,16 @@ public class Exporter {
         return adapters;
     }
 
+    /**
+     * Generates a single PropertyBinding adapter from a PropertyBindingEdge into a target directory. Currently it only
+     * supports the same functionality as the BeanBox that is simple 1:1 property to property binding. If the BeanBox gets
+     * support for more complex scenarios like property to method binding, this would need to be changed.
+     *
+     * @param targetDirectory the target directory
+     * @param propertyBindingEdge the property binding from which the class should be generated
+     * @return returns a file of the generated class
+     * @throws IOException if there is an error writing
+     */
     private File generatePropertyAdapter(File targetDirectory, PropertyBindingEdge propertyBindingEdge) throws IOException {
         File adapter = new File(targetDirectory, generateAdapterName() + ".java");
         while (adapter.exists()) {
@@ -540,35 +578,437 @@ public class Exporter {
         }
         if (!adapter.createNewFile()) throw new IOException("Error creating File: " + adapter.getName());
         propertyBindingEdge.setAdapterName(adapter.getName().replace(".java", ""));
-        PrintWriter writer = new PrintWriter(new FileWriter(adapter));
-        writer.println("package " + DEFAULT_ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
-        writer.println();
+        try(PrintWriter writer = new PrintWriter(new FileWriter(adapter))) {
+            writer.println("package " + DEFAULT_ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
+            writer.println();
+            writer.println("import java.io.Serializable;");
+            writer.println("import java.beans.PropertyChangeListener;");
+            writer.println("import java.beans.PropertyChangeEvent;");
+            writer.println();
+            writer.println("public class " + propertyBindingEdge.getAdapterName() + " implements PropertyChangeListener, Serializable {");
+            writer.println();
+            writer.println("\tprivate " + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " target;");
+            writer.println();
+            writer.println("\tpublic void setTarget(" + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " t) {");
+            writer.println("\t\ttarget = t;");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\tpublic void propertyChange(PropertyChangeEvent evt) {");
+            writer.println("\t\ttry {");
+            writer.println("\t\t\ttarget." + propertyBindingEdge.getTargetMethod().getName() + "((" + propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName() + ") evt.getNewValue());");
+            writer.println("\t\t} catch (Exception e) {");
+            writer.println("\t\t\te.printStackTrace();");
+            writer.println("\t\t}");
+            writer.println("\t}");
+            writer.println("}");
+            if (writer.checkError()) {
+                throw new IOException("Error writing Adapter File: " + adapter.getName());
+            }
+        }
+
+        return adapter;
+    }
+
+    public static Set<Class<?>> getAllExtendedOrImplementedTypes(Class<?> clazz) {
+        List<Class<?>> res = new ArrayList<>();
+
+        do {
+            res.add(clazz);
+            Class<?>[] interfaces = clazz.getInterfaces();
+            if (interfaces.length > 0) {
+                res.addAll(Arrays.asList(interfaces));
+                for (Class<?> interfaze : interfaces) {
+                    res.addAll(getAllExtendedOrImplementedTypes(interfaze));
+                }
+            }
+
+            Class<?> superClass = clazz.getSuperclass();
+            if (superClass == null) {
+                break;
+            }
+            clazz = superClass;
+        } while (!"java.lang.Object".equals(clazz.getCanonicalName()));
+
+        return new HashSet<>(res);
+    }
+
+    /**
+     * This method generates the bean class and the beanInfo class. It collects various information
+     * about the bean and uses it to generate all required code. If there are any complex properties that need a default
+     * value to be set, these are serialized.
+     *
+     * Requirement: Bean must adhere to the JavaBeans Specification, any EventListener interfaces must be implemented directly
+     *              and declare no more than one method.
+     * Possible leak: EventListener Interfaces that declare more than one method
+     *
+     * @param targetDirectory the target directory for the beans
+     * @param propertyDirectory the target directory for any serialized properties
+     * @param exportBean the bean to be generated
+     * @throws IOException if there is an error writing
+     * @throws InvocationTargetException if there is an error accessing properties
+     * @throws IllegalAccessException if there is an error accessing properties
+     * @throws NoSuchMethodException if there is an error accessing methods
+     */
+    private void generateBean(File targetDirectory, File propertyDirectory, ExportBean exportBean) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+        List<ExportProperty> exportProperties = exportBean.getProperties();
+        List<ExportMethod> exportMethods = exportBean.getMethods();
+        List<ExportEvent> exportEvents = exportBean.getEvents();
+        List<Class> interfaces = new ArrayList<>();
+        for (ExportMethod exportMethod : exportBean.getMethods()) {
+            if (exportMethod.isImplementInterface()) {
+                interfaces.add(exportMethod.getDeclaringClass());
+            }
+        }
+
+        File bean = new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java");
+        File beanInfo = new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java");
+        if (!bean.createNewFile()) throw new IOException("Error creating File: " + bean.getName() + ". Maybe you have conflicting resources?");
+        if (!beanInfo.createNewFile()) throw new IOException("Error creating File: " + beanInfo.getName());
+        PrintWriter writer = new PrintWriter(new FileWriter(bean));
+        writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
         writer.println();
         writer.println("import java.io.Serializable;");
-        writer.println("import java.beans.PropertyChangeListener;");
-        writer.println("import java.beans.PropertyChangeEvent;");
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println("import java.beans.PropertyChangeSupport;");
+            writer.println("import java.beans.PropertyChangeListener;");
+            writer.println("import java.beans.PropertyChangeEvent;");
+            interfaces.add(PropertyChangeListener.class);
+        }
         writer.println();
-        writer.println("public class " + propertyBindingEdge.getAdapterName() + " implements PropertyChangeListener, Serializable {");
+
+        StringBuilder implementations = new StringBuilder(" implements Serializable");
+        for (Class cls : interfaces) {
+            implementations.append(", ").append(cls.getCanonicalName());
+        }
+        writer.println("public class " + exportBean.getBeanName() + implementations + " {");
         writer.println();
-        writer.println("    private " + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " target;");
+        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+            writer.println("\tprivate " + node.getData().getClass().getCanonicalName() + " " + node.lowercaseFirst() + ";");
+        }
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println();
+            writer.println("\tprivate PropertyChangeSupport cs = new PropertyChangeSupport(this);");
+        }
+        //TODO: Veto Support -> postponed
         writer.println();
-        writer.println("    public void setTarget(" + propertyBindingEdge.getEnd().getData().getClass().getCanonicalName() + " t) {");
-        writer.println("        target = t;");
-        writer.println("    }");
+        writer.println("\tpublic " + exportBean.getBeanName() + "() {");
+        writer.println("\t\ttry{");
+        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+            writer.println("\t\t\t" + node.lowercaseFirst() + " = new " + node.getData().getClass().getCanonicalName() + "();");
+        }
         writer.println();
-        writer.println("    public void propertyChange(PropertyChangeEvent evt) {");
-        writer.println("        try {");
-        writer.println("            target." + propertyBindingEdge.getTargetMethod().getName() + "((" + propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName() + ") evt.getNewValue());");
-        writer.println("        } catch (Exception e) {");
-        writer.println("            e.printStackTrace();");
-        writer.println("        }");
-        writer.println("    }");
+        int hookupCounter = 0;
+        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+            for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
+                writer.println("\t\t\t" + edge.getHookup().getClass().getCanonicalName() + " "
+                        + "hookup" + hookupCounter + " = new " + edge.getHookup().getClass().getCanonicalName() + "();");
+                writer.println("\t\t\thookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");");
+                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "EventListener(hookup" + hookupCounter + ");");
+                hookupCounter++;
+            }
+            for (DirectCompositionEdge edge : node.getDirectCompositionEdges()) {
+                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "EventListener(" + edge.getEnd().lowercaseFirst() + ");");
+            }
+            for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
+                String canonicalAdaperName = DEFAULT_ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();
+                writer.println("\t\t\t" + canonicalAdaperName + " hookup" + hookupCounter + " = new " + canonicalAdaperName + "();");
+                writer.println("\t\t\thookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");");
+                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");");
+                hookupCounter++;
+            }
+        }
+        writer.println();
+        for (ExportProperty property : sortPropertiesByBinding(exportProperties.stream().filter(ExportProperty::isSetDefaultValue).collect(Collectors.toList()))) { //TODO: add veto support
+            Object value = property.getPropertyDescriptor().getReadMethod().invoke(property.getNode().getData());
+            if (value == null || value instanceof Void || isPrimitiveOrPrimitiveWrapperOrString(value.getClass())) {
+                writer.println("\t\t\t" + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName() + "(" + convertPrimitive(value) + ");");
+            } else {
+                File ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
+                while (ser.exists()) {
+                    ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
+                }
+                ser.getParentFile().mkdirs();
+                try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))) {
+                    out.writeObject(value);
+                    writer.println("\t\t\ttry (java.io.ObjectInputStream in = new java.io.ObjectInputStream(getClass().getResourceAsStream(\""
+                            + getRelativePath(targetDirectory.getAbsolutePath(), ser, false) + "\"))){");
+                    writer.println("\t\t\t\t" + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
+                            + "((" + property.getPropertyType().getCanonicalName() + ") in.readObject());");
+                    writer.println("\t\t\t}");
+                } catch (IOException i) {
+                    throw new IOException("Error serializing property: " + property.getNode().getName() + ":" + property.getName());
+                }
+            }
+        }
+        writer.println("\t\t} catch (Exception e) {");
+        writer.println("\t\t\te.printStackTrace();");
+        writer.println("\t\t}");
+        writer.println("\t}");
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println();
+            writer.println("\tpublic void addPropertyChangeListener(PropertyChangeListener listener) {");
+            writer.println("\t\tcs.addPropertyChangeListener(listener);");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\tpublic void removePropertyChangeListener(PropertyChangeListener listener) {");
+            writer.println("\t\tcs.removePropertyChangeListener(listener);");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\tpublic PropertyChangeListener[] getPropertyChangeListeners() {");
+            writer.println("\t\treturn cs.getPropertyChangeListeners();");
+            writer.println("\t}");
+            writer.println();
+            writer.println("\t@Override");
+            writer.println("\tpublic void propertyChange(PropertyChangeEvent evt) {}");
+            writer.println();
+        }
+        writer.println();
+        for (ExportProperty property : exportProperties) {
+            Method getter = property.getPropertyDescriptor().getReadMethod();
+            StringBuilder getterSignature = new StringBuilder("\tpublic " + property.getPropertyType().getCanonicalName() + " get" + property.uppercaseFirst() + "(");
+            for (int i = 0; i < getter.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    getterSignature.append(getter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
+                } else {
+                    getterSignature.append(", ").append(getter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
+                }
+            }
+            getterSignature.append(")");
+            Class<?>[] getterExceptions = getter.getExceptionTypes();
+            for (int i = 0; i < getterExceptions.length; i++) {
+                if (i == 0) {
+                    getterSignature.append("throws ").append(getterExceptions[i].getCanonicalName());
+                } else {
+                    getterSignature.append(",").append(getterExceptions[i].getCanonicalName());
+                }
+            }
+            getterSignature.append("{");
+            writer.println(getterSignature);
+            StringBuilder getterCall = new StringBuilder("\t\treturn ").append(property.getNode().lowercaseFirst()).append(".").append(getter.getName()).append("(");
+            for (int i = 0; i < getter.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    getterCall.append("arg").append(i);
+                } else {
+                    getterCall.append(", arg").append(i);
+                }
+            }
+            getterCall.append(");");
+            writer.println(getterCall);
+            writer.println("\t}");
+            writer.println();
+
+            Method setter = property.getPropertyDescriptor().getWriteMethod();
+            StringBuilder setterSignature = new StringBuilder("\tpublic void set" + property.uppercaseFirst() + "(");
+            for (int i = 0; i < setter.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    setterSignature.append(setter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
+                } else {
+                    setterSignature.append(", ").append(setter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
+                }
+            }
+            setterSignature.append(")");
+            Class<?>[] setterExceptions = setter.getExceptionTypes();
+            for (int i = 0; i < setterExceptions.length; i++) {
+                if (i == 0) {
+                    setterSignature.append("throws ").append(setterExceptions[i].getCanonicalName());
+                } else {
+                    setterSignature.append(",").append(setterExceptions[i].getCanonicalName());
+                }
+            }
+            setterSignature.append("{");
+            writer.println(setterSignature);
+            if (exportBean.isAddPropertyChangeSupport()) {
+                writer.println("\t\tcs.firePropertyChange(\"" + property.getName() + "\", " + property.getNode().lowercaseFirst() + ".get" + property.uppercaseFirst() + "(), arg0);");
+            }
+            StringBuilder setterCall = new StringBuilder("\t\t").append(property.getNode().lowercaseFirst()).append(".").append(setter.getName()).append("(");
+            for (int i = 0; i < setter.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    setterCall.append("arg").append(i);
+                } else {
+                    setterCall.append(", arg").append(i);
+                }
+            }
+            setterCall.append(");");
+            writer.println(setterCall);
+            writer.println("\t}");
+            writer.println();
+        }
+        writer.println();
+        for (ExportEvent event : exportEvents) {
+            writer.println("\tpublic void add" + event.uppercaseFirst() + "EventListener(" + event.getEventSetDescriptor().getListenerType().getCanonicalName() + " listener) {");
+            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getAddListenerMethod().getName() + "(listener);");
+            writer.println("\t}");
+            writer.println();
+            if (event.getEventSetDescriptor().getGetListenerMethod() != null) {
+                writer.println("\tpublic " + event.getEventSetDescriptor().getGetListenerMethod().getReturnType().getCanonicalName() + " get" + event.uppercaseFirst() + "EventListeners() {");
+                writer.println("\t\treturn " + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getGetListenerMethod().getName() + "();");
+                writer.println("\t}");
+                writer.println();
+            }
+            writer.println("\tpublic void remove" + event.uppercaseFirst() + "EventListener(" + event.getEventSetDescriptor().getListenerType().getCanonicalName() + " listener) {");
+            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getRemoveListenerMethod().getName() + "(listener);");
+            writer.println("\t}");
+            writer.println();
+        }
+        for (ExportMethod exportMethod : exportMethods) {
+            Method method = exportMethod.getMethodDescriptor().getMethod();
+            StringBuilder methodSignature = new StringBuilder("\tpublic " + method.getReturnType().getCanonicalName() + " " + method.getName() + "(");
+            for (int i = 0; i < method.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    methodSignature.append(method.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
+                } else {
+                    methodSignature.append(", ").append(method.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
+                }
+            }
+            methodSignature.append(")");
+            Class<?>[] setterExceptions = method.getExceptionTypes();
+            for (int i = 0; i < setterExceptions.length; i++) {
+                if (i == 0) {
+                    methodSignature.append("throws ").append(setterExceptions[i].getCanonicalName());
+                } else {
+                    methodSignature.append(",").append(setterExceptions[i].getCanonicalName());
+                }
+            }
+            methodSignature.append("{");
+            writer.println(methodSignature);
+            StringBuilder methodCall = new StringBuilder("\t\t").append(exportMethod.getNode().lowercaseFirst()).append(".").append(method.getName()).append("(");
+            for (int i = 0; i < method.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    methodCall.append("arg").append(i);
+                } else {
+                    methodCall.append(", arg").append(i);
+                }
+            }
+            methodCall.append(");");
+            writer.println(methodCall);
+            writer.println("\t}");
+            writer.println();
+        }
         writer.println("}");
+        writer.println();
         writer.close();
         if (writer.checkError()) {
-            throw new IOException("Error writing Adapter File: " + adapter.getName());
+            throw new IOException("Error writing Bean File: " + exportBean.getBeanName());
         }
-        return adapter;
+
+        writer = new PrintWriter(new FileWriter(beanInfo));
+        writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
+        writer.println();
+        writer.println("import java.beans.*;");
+        writer.println("import java.io.Serializable;");
+        if (exportBean.isAddPropertyChangeSupport()) {
+            writer.println("import java.beans.PropertyChangeListener;");
+        }
+        writer.println();
+        writer.println("public class " + exportBean.getBeanName() + "BeanInfo extends SimpleBeanInfo implements Serializable {");
+        writer.println();
+        if (!exportProperties.isEmpty()) {
+            writer.println("\t@Override");
+            writer.println("\tpublic PropertyDescriptor[] getPropertyDescriptors() {");
+            writer.println("\t\ttry {");
+            writer.println("\t\t\tClass cls = " + exportBean.getBeanName() + ".class;");
+            StringBuilder propertyDescriptorArray = new StringBuilder("{");
+            for (ExportProperty exportProperty : exportProperties) {
+                String descriptorName = "pd" + exportProperty.uppercaseFirst();
+                writer.println("\t\t\tPropertyDescriptor " + descriptorName + " = new PropertyDescriptor(\"" + exportProperty.getName() + "\", cls);");
+                writer.println("\t\t\t" + descriptorName + ".setDisplayName(\"" + exportProperty.getPropertyDescriptor().getDisplayName() + "\");");
+                if (exportProperty.getPropertyDescriptor().getPropertyEditorClass() != null) {
+                    writer.println("\t\t\t" + descriptorName + ".setPropertyEditorClass(" + exportProperty.getPropertyDescriptor().getPropertyEditorClass().getCanonicalName() + ".class);");
+                }
+                if (propertyDescriptorArray.length() > 1) {
+                    propertyDescriptorArray.append(", ").append(descriptorName);
+                } else {
+                    propertyDescriptorArray.append(descriptorName);
+                }
+            }
+            propertyDescriptorArray.append("}");
+            writer.println("\t\t\treturn new PropertyDescriptor[]" + propertyDescriptorArray + ";");
+            writer.println("\t\t} catch (IntrospectionException e) {");
+            writer.println("\t\t\te.printStackTrace();");
+            writer.println("\t\t}");
+            writer.println("\t\t\treturn null;");
+            writer.println("\t\t}");
+            writer.println();
+        }
+
+        if (!exportEvents.isEmpty()) {
+            writer.println("\t@Override");
+            writer.println("\tpublic EventSetDescriptor[] getEventSetDescriptors() {");
+            writer.println("\t\ttry {");
+            writer.println("\t\t\tClass cls = " + exportBean.getBeanName() + ".class;");
+            StringBuilder eventSetDescriptorArray = new StringBuilder("{");
+            if (exportBean.isAddPropertyChangeSupport()) {
+                writer.println("\t\t\tEventSetDescriptor esdPropertyChange = new EventSetDescriptor(cls, \"propertyChange\", PropertyChangeListener.class, \"propertyChange\");");
+                eventSetDescriptorArray.append("esdPropertyChange");
+            }
+            for (ExportEvent exportEvent : exportEvents) {
+                StringBuilder listenerMethodsArray = new StringBuilder("{");
+                for (Method method : exportEvent.getEventSetDescriptor().getListenerMethods()) {
+                    if (listenerMethodsArray.length() > 1) {
+                        listenerMethodsArray.append(", ").append("\"").append(method.getName()).append("\"");
+                    } else {
+                        listenerMethodsArray.append("\"").append(method.getName()).append("\"");
+                    }
+                }
+                String descriptorName = "esd" + exportEvent.uppercaseFirst();
+                writer.println("\t\t\tEventSetDescriptor " + descriptorName + " = new EventSetDescriptor(cls, \"" + exportEvent.getName() + "\", "
+                        + exportEvent.getEventSetDescriptor().getListenerType().getCanonicalName() + ".class, new String[]" + listenerMethodsArray.toString() + "}, " +
+                        "\"add" + exportEvent.uppercaseFirst() + "EventListener\", \"remove" + exportEvent.uppercaseFirst() + "EventListener\");");
+
+                if (eventSetDescriptorArray.length() > 1) {
+                    eventSetDescriptorArray.append(", ").append(descriptorName);
+                } else {
+                    eventSetDescriptorArray.append(descriptorName);
+                }
+            }
+            eventSetDescriptorArray.append("}");
+            writer.println("\t\t\treturn new EventSetDescriptor[]" + eventSetDescriptorArray + ";");
+            writer.println("\t\t} catch (IntrospectionException e) {");
+            writer.println("\t\t\te.printStackTrace();");
+            writer.println("\t\t}");
+            writer.println("\t\t\treturn null;");
+            writer.println("\t\t}");
+            writer.println();
+        }
+
+        if (!exportEvents.isEmpty()) {
+            writer.println("\t@Override");
+            writer.println("\tpublic MethodDescriptor[] getMethodDescriptors() {");
+            writer.println("\t\ttry {");
+            writer.println("\t\t\tClass cls = " + exportBean.getBeanName() + ".class;");
+            StringBuilder methodDescriptorArray = new StringBuilder("{");
+            for (ExportMethod exportMethod : exportMethods) {
+                StringBuilder classArray = new StringBuilder("{");
+                for (Class parameter : exportMethod.getMethodDescriptor().getMethod().getParameterTypes()) {
+                    if (classArray.length() > 1) {
+                        classArray.append(", ").append(parameter.getCanonicalName()).append(".class");
+                    } else {
+                        classArray.append(parameter.getCanonicalName()).append(".class");
+                    }
+                }
+                String descriptorName = "md" + exportMethod.uppercaseFirst();
+                writer.println("\t\t\tMethodDescriptor " + descriptorName + " = new MethodDescriptor(cls.getMethod(\"" + exportMethod.getName()
+                        + "\", new Class[]" + classArray + "}), null);");
+                if (methodDescriptorArray.length() > 1) {
+                    methodDescriptorArray.append(", ").append(descriptorName);
+                } else {
+                    methodDescriptorArray.append(descriptorName);
+                }
+            }
+            methodDescriptorArray.append("}");
+            writer.println("\t\t\treturn new MethodDescriptor[]" + methodDescriptorArray + ";");
+            writer.println("\t\t} catch (NoSuchMethodException e) {");
+            writer.println("\t\t\te.printStackTrace();");
+            writer.println("\t\t}");
+            writer.println("\t\t\treturn null;");
+            writer.println("\t\t}");
+            writer.println("}");
+            writer.println();
+        }
+        writer.close();
+        if (writer.checkError()) {
+            throw new IOException("Error writing BeanInfo File: " + exportBean.getBeanName());
+        }
     }
 
     private void packJar(File target, File root) throws IOException {
@@ -643,382 +1083,6 @@ public class Exporter {
         writer.close();
         if (writer.checkError()) {
             throw new IOException("Error writing Manifest");
-        }
-    }
-
-    private void generateBean(File root, File beanDirectory, File propertyDirectory, File adapterDirectory, ExportBean exportBean) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
-        List<ExportProperty> exportProperties = exportBean.getProperties();
-        List<ExportMethod> exportMethods = exportBean.getMethods();
-        List<ExportEvent> exportEvents = exportBean.getEvents();
-        List<Class> interfaces = new ArrayList<>();
-        for (BeanNode node : exportBean.getBeans().getInputNodes()) {
-            for (Class cls : node.getData().getClass().getInterfaces()) {
-                if (EventListener.class.isAssignableFrom(cls) && !interfaces.contains(cls) && !cls.getName().contains("PropertyChange")) {
-                    interfaces.add(cls);
-                }
-            }
-        }
-
-        File bean = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java");
-        File beanInfo = new File(beanDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java");
-        if (!bean.createNewFile()) throw new IOException("Error creating File: " + bean.getName());
-        if (!beanInfo.createNewFile()) throw new IOException("Error creating File: " + beanInfo.getName());
-        PrintWriter writer = new PrintWriter(new FileWriter(bean));
-        writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
-        writer.println();
-        /*Set<String> imports = new HashSet<>();
-        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-            String nextImport = node.getData().getClass().getCanonicalName();
-            if (!imports.contains(nextImport)) {
-                writer.println("import " + nextImport + ";");
-                imports.add(nextImport);
-            }
-            for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
-                String nextAdapterImport = edge.getHookup().getClass().getCanonicalName();
-                if (!imports.contains(nextAdapterImport)) {
-                    writer.println("import " + nextAdapterImport + ";");
-                    imports.add(nextAdapterImport);
-                }
-            }
-        }
-        writer.println();
-        for (ExportProperty exportProperty : exportProperties) {
-            if (!exportProperty.getPropertyType().isPrimitive()) {
-                String nextImport = exportProperty.getPropertyType().getCanonicalName();
-                if (!imports.contains(nextImport)) {
-                    writer.println("import " + nextImport + ";");
-                    imports.add(nextImport);
-                }
-            }
-        }*/
-        writer.println("import java.io.Serializable;");
-        if (exportBean.isAddPropertyChangeSupport()) {
-            writer.println("import java.beans.PropertyChangeSupport;");
-            writer.println("import java.beans.PropertyChangeListener;");
-            writer.println("import java.beans.PropertyChangeEvent;");
-            interfaces.add(PropertyChangeListener.class);
-        }
-        writer.println();
-
-        StringBuilder implementations = new StringBuilder(" implements Serializable");
-        for (Class cls : interfaces) {
-            implementations.append(", ").append(cls.getCanonicalName());
-        }
-        writer.println("public class " + exportBean.getBeanName() + implementations + " {");
-        writer.println();
-        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-            writer.println("private " + node.getData().getClass().getCanonicalName() + " " + node.lowercaseFirst() + ";");
-        }
-        if (exportBean.isAddPropertyChangeSupport()) {
-            writer.println();
-            writer.println("    private PropertyChangeSupport cs = new PropertyChangeSupport(this);");
-        }
-
-        /*writer.println();
-        for (ExportProperty exportProperty : exportProperties) {
-            writer.println("private " + exportProperty.getPropertyType().getCanonicalName() + " " + exportProperty.getName() + ";");
-        }*/
-        //TODO: Veto Support -> postponed
-        writer.println();
-        writer.println("    public " + exportBean.getBeanName() + "() {");
-        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-            writer.println("        " + node.lowercaseFirst() + " = new " + node.getData().getClass().getCanonicalName() + "();");
-        }
-        writer.println();
-        int hookupCounter = 0;
-        for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-            for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
-                writer.println("        " + edge.getHookup().getClass().getCanonicalName() + " "
-                        + "hookup" + hookupCounter + " = new " + edge.getHookup().getClass().getCanonicalName() + "();");
-                writer.println("        hookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");");
-                writer.println("        " + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");");
-                hookupCounter++;
-            }
-            for (DirectCompositionEdge edge : node.getDirectCompositionEdges()) {
-                writer.println("        " + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(" + edge.getEnd().lowercaseFirst() + ");");
-            }
-            for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
-                String canonicalAdaperName = DEFAULT_ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();
-                writer.println("        " + canonicalAdaperName + " hookup" + hookupCounter + " = new " + canonicalAdaperName + "();");
-                writer.println("        hookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");");
-                writer.println("        " + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");");
-                hookupCounter++;
-            }
-        }
-        writer.println();
-        for (ExportProperty property : sortPropertiesByBinding(exportProperties.stream().filter(ExportProperty::isSetDefaultValue).collect(Collectors.toList()))) { //TODO: add veto support
-            Object value = property.getPropertyDescriptor().getReadMethod().invoke(property.getNode().getData());
-            if (value == null || value instanceof Void || isPrimitiveOrPrimitiveWrapperOrString(value.getClass())) {
-                writer.println("        " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
-                        + "(" + convertPrimitive(value) + ");");
-            } else {
-                File ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
-                while (ser.exists()) {
-                    ser = new File(propertyDirectory.getAbsolutePath(), generateSerName(value) + ".ser");
-                }
-                ser.getParentFile().mkdirs();
-                try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))) {
-                    out.writeObject(value);
-                    writer.println("        try (java.io.ObjectInputStream in = new java.io.ObjectInputStream(getClass().getResourceAsStream(\"" + getRelativePath(beanDirectory.getAbsolutePath(), ser, false) + "\"))){");
-                    writer.println("            " + property.getNode().lowercaseFirst() + "." + property.getPropertyDescriptor().getWriteMethod().getName()
-                            + "((" + property.getPropertyType().getCanonicalName() + ") in.readObject());");
-                    writer.println("        } catch (java.io.IOException | java.lang.ClassNotFoundException e) {");
-                    writer.println("            e.printStackTrace();");
-                    writer.println("        }");
-                } catch (IOException i) {
-                    throw new IOException("Error serializing property: " + property.getNode().getName() + ":" + property.getName());
-                }
-            }
-        }
-        //TODO: sort order to recognise property bindings -> postponed
-        writer.println("    }");
-        if (exportBean.isAddPropertyChangeSupport()) {
-            writer.println();
-            writer.println("\tpublic void addPropertyChangeListener(PropertyChangeListener listener) {");
-            writer.println("\t\tcs.addPropertyChangeListener(listener);");
-            writer.println("\t}");
-            writer.println();
-            writer.println("\tpublic void removePropertyChangeListener(PropertyChangeListener listener) {");
-            writer.println("\t\tcs.removePropertyChangeListener(listener);");
-            writer.println("\t}");
-            writer.println();
-            writer.println("\tpublic PropertyChangeListener[] getPropertyChangeListeners() {");
-            writer.println("\t\treturn cs.getPropertyChangeListeners();");
-            writer.println("\t}");
-            writer.println();
-            writer.println("\t@Override");
-            writer.println("\tpublic void propertyChange(PropertyChangeEvent evt) {}");
-            writer.println();
-        }
-        writer.println();
-        for (ExportProperty property : exportProperties) {
-            Method getter = property.getPropertyDescriptor().getReadMethod();
-            StringBuilder getterSignature = new StringBuilder("\tpublic " + property.getPropertyType().getCanonicalName() + " " + getter.getName() + "(");
-            for (int i = 0; i < getter.getParameterTypes().length; i++) {
-                if (i == 0) {
-                    getterSignature.append(getter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
-                } else {
-                    getterSignature.append(", ").append(getter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
-                }
-            }
-            getterSignature.append(")");
-            Class<?>[] getterExceptions = getter.getExceptionTypes();
-            for (int i = 0; i < getterExceptions.length; i++) {
-                if (i == 0) {
-                    getterSignature.append("throws ").append(getterExceptions[i].getCanonicalName());
-                } else {
-                    getterSignature.append(",").append(getterExceptions[i].getCanonicalName());
-                }
-            }
-            getterSignature.append("{");
-            writer.println(getterSignature);
-            StringBuilder getterCall = new StringBuilder("\t\treturn ").append(property.getNode().lowercaseFirst()).append(".").append(getter.getName()).append("(");
-            for (int i = 0; i < getter.getParameterTypes().length; i++) {
-                if (i == 0) {
-                    getterCall.append("arg").append(i);
-                } else {
-                    getterCall.append(", arg").append(i);
-                }
-            }
-            getterCall.append(");");
-            writer.println(getterCall);
-            writer.println("\t}");
-            writer.println();
-
-            Method setter = property.getPropertyDescriptor().getWriteMethod();
-            StringBuilder setterSignature = new StringBuilder("\tpublic void " + setter.getName() + "(");
-            for (int i = 0; i < setter.getParameterTypes().length; i++) {
-                if (i == 0) {
-                    setterSignature.append(setter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
-                } else {
-                    setterSignature.append(", ").append(setter.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
-                }
-            }
-            setterSignature.append(")");
-            Class<?>[] setterExceptions = setter.getExceptionTypes();
-            for (int i = 0; i < setterExceptions.length; i++) {
-                if (i == 0) {
-                    setterSignature.append("throws ").append(setterExceptions[i].getCanonicalName());
-                } else {
-                    setterSignature.append(",").append(setterExceptions[i].getCanonicalName());
-                }
-            }
-            setterSignature.append("{");
-            writer.println(setterSignature);
-            if (exportBean.isAddPropertyChangeSupport()) {
-                writer.println("\t\tcs.firePropertyChange(\"" + property.getName() + "\", " + property.getNode().lowercaseFirst() + ".get" + property.uppercaseFirst() + "(), arg0);");
-            }
-            StringBuilder setterCall = new StringBuilder("\t\t").append(property.getNode().lowercaseFirst()).append(".").append(setter.getName()).append("(");
-            for (int i = 0; i < setter.getParameterTypes().length; i++) {
-                if (i == 0) {
-                    setterCall.append("arg").append(i);
-                } else {
-                    setterCall.append(", arg").append(i);
-                }
-            }
-            setterCall.append(");");
-            writer.println(setterCall);
-            writer.println("\t}");
-            writer.println();
-        }
-        writer.println();
-        for (ExportEvent event : exportEvents) { //TODO: optimize
-            writer.println("\tpublic void " + event.getEventSetDescriptor().getAddListenerMethod().getName() + "(" + event.getEventSetDescriptor().getListenerType().getCanonicalName() + " listener) {");
-            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getAddListenerMethod().getName() + "(listener);");
-            writer.println("\t}");
-            writer.println();
-            if (event.getEventSetDescriptor().getGetListenerMethod() != null) {
-                writer.println("\tpublic " + event.getEventSetDescriptor().getGetListenerMethod().getReturnType().getCanonicalName() + " " + event.getEventSetDescriptor().getGetListenerMethod().getName() + "() {");
-                writer.println("\t\treturn " + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getGetListenerMethod().getName() + "();");
-                writer.println("\t}");
-                writer.println();
-            }
-            writer.println("\tpublic void " + event.getEventSetDescriptor().getRemoveListenerMethod().getName() + "(" + event.getEventSetDescriptor().getListenerType().getCanonicalName() + " listener) {");
-            writer.println("\t\t" + event.getBeanNode().lowercaseFirst() + "." + event.getEventSetDescriptor().getRemoveListenerMethod().getName() + "(listener);");
-            writer.println("\t}");
-            writer.println();
-        }
-        for (ExportMethod exportMethod : exportMethods) {
-            Method method = exportMethod.getMethodDescriptor().getMethod();
-            StringBuilder methodSignature = new StringBuilder("\tpublic " + method.getReturnType().getCanonicalName() + " " + method.getName() + "(");
-            for (int i = 0; i < method.getParameterTypes().length; i++) {
-                if (i == 0) {
-                    methodSignature.append(method.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
-                } else {
-                    methodSignature.append(", ").append(method.getParameterTypes()[i].getCanonicalName()).append(" arg").append(i);
-                }
-            }
-            methodSignature.append(")");
-            Class<?>[] setterExceptions = method.getExceptionTypes();
-            for (int i = 0; i < setterExceptions.length; i++) {
-                if (i == 0) {
-                    methodSignature.append("throws ").append(setterExceptions[i].getCanonicalName());
-                } else {
-                    methodSignature.append(",").append(setterExceptions[i].getCanonicalName());
-                }
-            }
-            methodSignature.append("{");
-            writer.println(methodSignature);
-            StringBuilder methodCall = new StringBuilder("\t\t").append(exportMethod.getNode().lowercaseFirst()).append(".").append(method.getName()).append("(");
-            for (int i = 0; i < method.getParameterTypes().length; i++) {
-                if (i == 0) {
-                    methodCall.append("arg").append(i);
-                } else {
-                    methodCall.append(", arg").append(i);
-                }
-            }
-            methodCall.append(");");
-            writer.println(methodCall);
-            writer.println("\t}");
-            writer.println();
-        }
-        writer.println("}");
-        writer.println();
-        writer.close();
-        if (writer.checkError()) {
-            throw new IOException("Error writing Bean File: " + exportBean.getBeanName());
-        }
-
-        writer = new PrintWriter(new FileWriter(beanInfo));
-        writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
-        writer.println();
-        writer.println("import java.beans.*;");
-        writer.println("import java.io.Serializable;");
-        if (exportBean.isAddPropertyChangeSupport()) {
-            writer.println("import java.beans.PropertyChangeListener;");
-        }
-        writer.println();
-        writer.println("public class " + exportBean.getBeanName() + "BeanInfo extends SimpleBeanInfo implements Serializable {");
-        writer.println();
-        if (!exportProperties.isEmpty()) {
-            writer.println("    @Override");
-            writer.println("    public PropertyDescriptor[] getPropertyDescriptors() {");
-            writer.println("        try {");
-            writer.println("            Class cls = " + exportBean.getBeanName() + ".class;");
-            StringBuilder propertyDescriptorArray = new StringBuilder("{");
-            for (ExportProperty exportProperty : exportProperties) {
-                String descriptorName = "pd" + exportProperty.uppercaseFirst();
-                writer.println("            PropertyDescriptor " + descriptorName + " = new PropertyDescriptor(\"" + exportProperty.getName() + "\", cls);");
-                writer.println("            " + descriptorName + ".setDisplayName(\"" + exportProperty.getPropertyDescriptor().getDisplayName() + "\");");
-                if (exportProperty.getPropertyDescriptor().getPropertyEditorClass() != null) {
-                    writer.println("            " + descriptorName + ".setPropertyEditorClass(" + exportProperty.getPropertyDescriptor().getPropertyEditorClass().getCanonicalName() + ".class);");
-                }
-                if (propertyDescriptorArray.length() > 1) {
-                    propertyDescriptorArray.append(", ").append(descriptorName);
-                } else {
-                    propertyDescriptorArray.append(descriptorName);
-                }
-            }
-            propertyDescriptorArray.append("}");
-            writer.println("            return new PropertyDescriptor[]" + propertyDescriptorArray + ";");
-            writer.println("        } catch (IntrospectionException e) {");
-            writer.println("            e.printStackTrace();");
-            writer.println("        }");
-            writer.println("        return null;");
-            writer.println("    }");
-            writer.println();
-        }
-
-        if (!exportEvents.isEmpty()) {
-            writer.println("    @Override");
-            writer.println("    public EventSetDescriptor[] getEventSetDescriptors() {");
-            writer.println("        try {");
-            writer.println("            Class cls = " + exportBean.getBeanName() + ".class;");
-            StringBuilder eventSetDescriptorArray = new StringBuilder("{");
-            if (exportBean.isAddPropertyChangeSupport()) {
-                writer.println("            EventSetDescriptor esdPropertyChange = new EventSetDescriptor(cls, \"propertyChange\", PropertyChangeListener.class, \"propertyChange\");");
-                eventSetDescriptorArray.append("esdPropertyChange");
-            }
-            for (ExportEvent exportEvent : exportEvents) {
-                String descriptorName = "esd" + exportEvent.uppercaseFirst();
-                writer.println("            EventSetDescriptor " + descriptorName + " = new EventSetDescriptor(cls, \"" + exportEvent.getName() //TODO:generify
-                        + "\", " + exportEvent.getEventSetDescriptor().getListenerType().getCanonicalName() + ".class, \"" + exportEvent.getEventSetDescriptor().getListenerMethods()[0].getName() + "\");");
-
-                if (eventSetDescriptorArray.length() > 1) {
-                    eventSetDescriptorArray.append(", ").append(descriptorName);
-                } else {
-                    eventSetDescriptorArray.append(descriptorName);
-                }
-            }
-            eventSetDescriptorArray.append("}");
-            writer.println("            return new EventSetDescriptor[]" + eventSetDescriptorArray + ";");
-            writer.println("        } catch (IntrospectionException e) {");
-            writer.println("            e.printStackTrace();");
-            writer.println("        }");
-            writer.println("        return null;");
-            writer.println("    }");
-            writer.println();
-        }
-
-        if (!exportEvents.isEmpty()) {
-            writer.println("    @Override");
-            writer.println("    public MethodDescriptor[] getMethodDescriptors() {");
-            writer.println("        try {");
-            writer.println("            Class cls = " + exportBean.getBeanName() + ".class;");
-            StringBuilder methodDescriptorArray = new StringBuilder("{");
-            for (ExportMethod exportMethod : exportMethods) {
-                String descriptorName = "md" + exportMethod.uppercaseFirst();
-                writer.println("            MethodDescriptor " + descriptorName + " = new MethodDescriptor(cls.getMethod(\"" + exportMethod.getName() //TODO:generify
-                        + "\", new Class[]{" + exportMethod.getMethodDescriptor().getMethod().getParameterTypes()[0].getCanonicalName() + ".class}), null);");
-                if (methodDescriptorArray.length() > 1) {
-                    methodDescriptorArray.append(", ").append(descriptorName);
-                } else {
-                    methodDescriptorArray.append(descriptorName);
-                }
-            }
-            methodDescriptorArray.append("}");
-            writer.println("            return new MethodDescriptor[]" + methodDescriptorArray + ";");
-            writer.println("        } catch (NoSuchMethodException e) {");
-            writer.println("            e.printStackTrace();");
-            writer.println("        }");
-            writer.println("        return null;");
-            writer.println("    }");
-            writer.println("}");
-            writer.println();
-        }
-        writer.close();
-        if (writer.checkError()) {
-            throw new IOException("Error writing BeanInfo File: " + exportBean.getBeanName());
         }
     }
 
@@ -1102,6 +1166,7 @@ public class Exporter {
                 methodNamePool.add(event.getName());
             }
         }*/
+        //TODO: Validate interfacing and maybe ask user
         //TODO: Validate Unique property naming within ExportBean
         //TODO: Validate Unique Export bean naming, may not have the same name as another Bean in the generated JAR
         //TODO: Validate resource conflicts

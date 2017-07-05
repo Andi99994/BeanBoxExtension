@@ -11,10 +11,13 @@ public class ExportMethod {
     private BeanNode node;
     private String name;
     private boolean include = true;
+    private boolean implementInterface = true;
+    private Class declaringClass;
 
-    public ExportMethod(MethodDescriptor methodDescriptor, BeanNode node) {
+    public ExportMethod(MethodDescriptor methodDescriptor, BeanNode node, Class declaringClass) {
         this.methodDescriptor = methodDescriptor;
         this.node = node;
+        this.declaringClass = declaringClass;
     }
 
     public String getName() {
@@ -56,5 +59,17 @@ public class ExportMethod {
             c[0] = Character.toUpperCase(c[0]);
         }
         return new String(c);
+    }
+
+    public Class getDeclaringClass() {
+        return declaringClass;
+    }
+
+    public boolean isImplementInterface() {
+        return declaringClass != null && implementInterface;
+    }
+
+    public void setImplementInterface(boolean implementInterface) {
+        this.implementInterface = implementInterface;
     }
 }
