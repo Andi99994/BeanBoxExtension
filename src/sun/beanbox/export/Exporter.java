@@ -18,7 +18,6 @@ import java.beans.*;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,12 +62,10 @@ public class Exporter {
      * datastructure.
      *
      * @param beans the beans that were selected for export
-     * @throws IntrospectionException    if there is an error reading bean information
-     * @throws IllegalArgumentException  if there is an error accessing bean properties
-     * @throws InvocationTargetException if there is an error accessing bean properties
-     * @throws IllegalAccessException    if there is an error accessing bean properties
+     * @throws IntrospectionException   if there is an error reading bean information
+     * @throws IllegalArgumentException if there is an error accessing bean properties
      */
-    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, NoSuchMethodException {
         reservedPropertyNames.add("propertyChange");
         for (List<Wrapper> group : groupWrappers(beans)) {
             exportBeans.add(assembleExportBean(group, DEFAULT_BEAN_NAME + exportBeans.size()));
@@ -155,12 +152,10 @@ public class Exporter {
      * @param wrappers a list of Wrappers that should be converted into an ExportBean
      * @param name     the name of the ExportBean
      * @return returns an ExportBean containing all important information
-     * @throws IntrospectionException    if there is an error reading bean information
-     * @throws IllegalArgumentException  if there is an error reading properties
-     * @throws InvocationTargetException if there is an error reading properties
-     * @throws IllegalAccessException    if there is an error reading properties
+     * @throws IntrospectionException   if there is an error reading bean information
+     * @throws IllegalArgumentException if there is an error reading properties
      */
-    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, NoSuchMethodException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
             createBeanNode(wrapper, createdNodes);
@@ -178,11 +173,9 @@ public class Exporter {
      * @param wrapper      the Wrapper to convert.
      * @param createdNodes all BeanNodes of an ExportBean that have already been created. This is needed to deal with cyclic composition.
      * @return returns a BeanNode
-     * @throws IntrospectionException    if there is an error reading bean information
-     * @throws InvocationTargetException if there is an error reading properties
-     * @throws IllegalAccessException    if there is an error reading properties
+     * @throws IntrospectionException if there is an error reading bean information
      */
-    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, NoSuchMethodException {
         //avoid following cyclic references
         if (createdNodes.get(wrapper) != null) {
             return createdNodes.get(wrapper);
@@ -226,7 +219,7 @@ public class Exporter {
                         break;
                     }
                 }
-                if(!addMethod) continue;
+                if (!addMethod) continue;
                 List<Class> classTree = new ArrayList<>(getAllExtendedOrImplementedTypes(beanNode.getData().getClass()));
                 List<Class> declaringInterfaces = new ArrayList<>();
                 for (Class cls : classTree) {
@@ -243,8 +236,8 @@ public class Exporter {
                 for (Class cls : declaringInterfaces) {
                     boolean add = true;
                     for (Class cls2 : declaringInterfaces) {
-                        if(cls.equals(cls2)) continue;
-                        if(cls2.isAssignableFrom(cls)){
+                        if (cls.equals(cls2)) continue;
+                        if (cls2.isAssignableFrom(cls)) {
                             add = false;
                             break;
                         }
@@ -589,7 +582,7 @@ public class Exporter {
      * supports the same functionality as the BeanBox that is simple 1:1 property to property binding. If the BeanBox gets
      * support for more complex scenarios like property to method binding, this would need to be changed.
      *
-     * @param targetDirectory the target directory
+     * @param targetDirectory     the target directory
      * @param propertyBindingEdge the property binding from which the class should be generated
      * @return returns a file of the generated class
      * @throws IOException if there is an error writing
@@ -601,7 +594,7 @@ public class Exporter {
         }
         if (!adapter.createNewFile()) throw new IOException("Error creating File: " + adapter.getName());
         propertyBindingEdge.setAdapterName(adapter.getName().replace(".java", ""));
-        try(PrintWriter writer = new PrintWriter(new FileWriter(adapter))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(adapter))) {
             writer.println("package " + DEFAULT_ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
             writer.println();
             writer.println("import java.io.Serializable;");
@@ -659,18 +652,18 @@ public class Exporter {
      * This method generates the bean class and the beanInfo class. It collects various information
      * about the bean and uses it to generate all required code. If there are any complex properties that need a default
      * value to be set, these are serialized.
-     *
+     * <p>
      * Requirement: Bean must adhere to the JavaBeans Specification, any EventListener interfaces must be implemented directly
-     *              and declare no more than one method.
+     * and declare no more than one method.
      * Possible leak: EventListener Interfaces that declare more than one method
      *
-     * @param targetDirectory the target directory for the beans
+     * @param targetDirectory   the target directory for the beans
      * @param propertyDirectory the target directory for any serialized properties
-     * @param exportBean the bean to be generated
-     * @throws IOException if there is an error writing
+     * @param exportBean        the bean to be generated
+     * @throws IOException               if there is an error writing
      * @throws InvocationTargetException if there is an error accessing properties
-     * @throws IllegalAccessException if there is an error accessing properties
-     * @throws NoSuchMethodException if there is an error accessing methods
+     * @throws IllegalAccessException    if there is an error accessing properties
+     * @throws NoSuchMethodException     if there is an error accessing methods
      */
     private void generateBean(File targetDirectory, File propertyDirectory, ExportBean exportBean) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         List<ExportProperty> exportProperties = exportBean.getProperties();
@@ -685,7 +678,8 @@ public class Exporter {
 
         File bean = new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java");
         File beanInfo = new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java");
-        if (!bean.createNewFile()) throw new IOException("Error creating File: " + bean.getName() + ". Maybe you have conflicting resources?");
+        if (!bean.createNewFile())
+            throw new IOException("Error creating File: " + bean.getName() + ". Maybe you have conflicting resources?");
         if (!beanInfo.createNewFile()) throw new IOException("Error creating File: " + beanInfo.getName());
         PrintWriter writer = new PrintWriter(new FileWriter(bean));
         writer.println("package " + DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), ".") + ";");
@@ -726,11 +720,11 @@ public class Exporter {
                 writer.println("\t\t\t" + edge.getHookup().getClass().getCanonicalName() + " "
                         + "hookup" + hookupCounter + " = new " + edge.getHookup().getClass().getCanonicalName() + "();");
                 writer.println("\t\t\thookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");");
-                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "EventListener(hookup" + hookupCounter + ");");
+                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");"); //TODO: method call generify
                 hookupCounter++;
             }
             for (DirectCompositionEdge edge : node.getDirectCompositionEdges()) {
-                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "EventListener(" + edge.getEnd().lowercaseFirst() + ");");
+                writer.println("\t\t\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(" + edge.getEnd().lowercaseFirst() + ");");
             }
             for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
                 String canonicalAdaperName = DEFAULT_ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();

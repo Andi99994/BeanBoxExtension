@@ -6,19 +6,17 @@ import java.lang.reflect.InvocationTargetException;
 /**
  * Created by Andi on 26.05.2017.
  */
-public class ExportProperty {
+public class ExportProperty { //TODO: add display name property
 
     private PropertyDescriptor propertyDescriptor;
     private boolean export = true;
     private BeanNode node;
-    private Object defaultValue;
     private String name;
     private boolean setDefaultValue = false;
 
-    public ExportProperty(PropertyDescriptor propertyDescriptor, BeanNode node) throws InvocationTargetException, IllegalAccessException {
+    public ExportProperty(PropertyDescriptor propertyDescriptor, BeanNode node) {
         this.propertyDescriptor = propertyDescriptor;
         this.node = node;
-        this.defaultValue = propertyDescriptor.getReadMethod().invoke(node.getData());
     }
 
     public String getName() {
@@ -51,14 +49,6 @@ public class ExportProperty {
 
     public Object getCurrentValue() throws InvocationTargetException, IllegalAccessException {
         return propertyDescriptor.getReadMethod().invoke(node.getData());
-    }
-
-    public Object getDefaultValue() {
-        return defaultValue;
-    }
-
-    public void setDefaultValue(Object defaultValue) {
-        this.defaultValue = defaultValue;
     }
 
     public Class getPropertyType() {
