@@ -23,7 +23,7 @@ public class AllMethodsEditor extends JPanel {
         setLayout(new GridBagLayout());
 
         JCheckBox include = new JCheckBox("Include all in input interface");
-        include.setEnabled(node.isOutputInterface());
+        include.setEnabled(node.isInputInterface());
         include.setAlignmentX(Component.CENTER_ALIGNMENT);
         include.setSelected(node.isAllMethodsInInputInterface());
         include.addActionListener(e -> node.setAllMethodsInInputInterface(include.isSelected()));

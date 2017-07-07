@@ -1,6 +1,9 @@
 package sun.beanbox.export;
 
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+import com.squareup.javapoet.FieldSpec;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.TypeSpec;
 import org.apache.commons.io.FileUtils;
 import sun.beanbox.HookupManager;
 import sun.beanbox.Wrapper;
@@ -13,6 +16,7 @@ import sun.beanbox.export.util.JARCompiler;
 import sun.beanbox.export.util.StringUtil;
 
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.Modifier;
 import java.beans.*;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
@@ -192,9 +196,10 @@ public class Exporter {
         //add all methods eligible for export. It is highly suggested to define these in a BeanInfo as otherwise there are going to be a lot
         //also we check if the class or any superclass implements any EventListener interface for one of these methods.
         for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
-            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden() && !methodDescriptor.getName().equals("propertyChange")
+            if (!methodDescriptor.isExpert() && !methodDescriptor.isHidden()
                     && !methodDescriptor.getName().equals("getClass") && !methodDescriptor.getName().equals("getPeer")
                     && !methodDescriptor.getName().equals("notify") && !methodDescriptor.getName().equals("wait")
+                    && !methodDescriptor.getName().toLowerCase().contains("propertychange")
                     && !methodDescriptor.getName().equals("notifyAll") && methodDescriptor.getMethod().getReturnType().equals(Void.TYPE)) {
                 Method checkMethod = methodDescriptor.getMethod();
                 boolean addMethod = true;
@@ -401,9 +406,9 @@ public class Exporter {
             if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
                 ArrayList<File> resources = collectResources();
                 copyAndExtractResources(tmpDirectory, resources);
-                resources.addAll(generatePropertyAdapters(tmpAdapterDirectory));
+                resources.addAll(generatePropertyAdapters(tmpDirectory));
                 for (ExportBean exportBean : exportBeans) {
-                    generateBean(tmpBeanDirectory, tmpPropertiesDirectory, exportBean);
+                    generateBeanJavaPoet(tmpBeanDirectory, tmpPropertiesDirectory, exportBean, tmpDirectory);
                 }
                 generateManifest(tmpManifestDirectory);
                 JARCompiler.compileSources(tmpBeanDirectory, resources);
@@ -565,7 +570,7 @@ public class Exporter {
         for (ExportBean exportBean : exportBeans) {
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
                 for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
-                    adapters.add(generatePropertyAdapter(targetDirectory, edge));
+                    adapters.add(generatePropertyAdapterJavaPoet(targetDirectory, edge));
                 }
             }
         }
@@ -620,6 +625,460 @@ public class Exporter {
         return adapter;
     }
 
+    /**
+     * Generates a single PropertyBinding adapter from a PropertyBindingEdge into a target directory. Currently it only
+     * supports the same functionality as the BeanBox that is simple 1:1 property to property binding. If the BeanBox gets
+     * support for more complex scenarios like property to method binding, this would need to be changed.
+     * <p>
+     * Note: Like the BeanBox, this does not support indexed properties
+     *
+     * @param targetDirectory     the target directory
+     * @param propertyBindingEdge the property binding from which the class should be generated
+     * @return returns a file of the generated class
+     * @throws IOException if there is an error writing
+     */
+    private File generatePropertyAdapterJavaPoet(File targetDirectory, PropertyBindingEdge propertyBindingEdge) throws IOException {
+        File adapter = new File(targetDirectory.getAbsolutePath() + File.separator + DEFAULT_ADAPTER_DIRECTORY_NAME,
+                StringUtil.generateName("__PropertyHookup_", 100000000, 900000000) + ".java");
+        while (adapter.exists()) {
+            adapter = new File(targetDirectory, StringUtil.generateName("__PropertyHookup_", 100000000, 900000000) + ".java");
+        }
+        propertyBindingEdge.setAdapterName(adapter.getName().replace(".java", ""));
+
+        MethodSpec setTarget = MethodSpec.methodBuilder("setTarget")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(void.class)
+                .addParameter(propertyBindingEdge.getEnd().getData().getClass(), "t")
+                .addCode("target = t;")
+                .build();
+
+        MethodSpec propertyChange = MethodSpec.methodBuilder("propertyChange")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(void.class)
+                .addParameter(PropertyChangeEvent.class, "evt")
+                .addCode("try {\n" +
+                        "\ttarget." + propertyBindingEdge.getTargetMethod().getName() + "((" + propertyBindingEdge.getTargetMethod().getParameterTypes()[0].getCanonicalName() + ") evt.getNewValue());\n" +
+                        "} catch (Exception e) {\n" +
+                        "\te.printStackTrace();\n" +
+                        "}")
+                .build();
+
+        FieldSpec target = FieldSpec.builder(propertyBindingEdge.getEnd().getData().getClass(), "target")
+                .addModifiers(Modifier.PRIVATE)
+                .build();
+
+        FieldSpec suid = FieldSpec.builder(long.class, "serialVersionUID")
+                .addModifiers(Modifier.FINAL, Modifier.PRIVATE, Modifier.STATIC)
+                .initializer("1L")
+                .build();
+
+        TypeSpec helloWorld = TypeSpec.classBuilder(propertyBindingEdge.getAdapterName())
+                .addModifiers(Modifier.PUBLIC)
+                .addSuperinterface(PropertyChangeListener.class)
+                .addSuperinterface(Serializable.class)
+                .addMethod(setTarget)
+                .addMethod(propertyChange)
+                .addField(target)
+                .addField(suid)
+                .build();
+
+        JavaFile javaFile = JavaFile.builder(DEFAULT_ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), helloWorld)
+                .build();
+        javaFile.writeTo(targetDirectory);
+
+        return adapter;
+    }
+
+    /**
+     * This method generates the bean class and the beanInfo class. It collects various information
+     * about the bean and uses it to generate all required code. If there are any complex properties that need a default
+     * value to be set, these are serialized.
+     * <p>
+     * Requirement: Bean must adhere to the JavaBeans Specification, any EventListener interfaces must be implemented directly
+     * and declare no more than one method.
+     * Possible bug: EventListener Interfaces that declare more than one method
+     * Possible extension: Add PropertyVeto support
+     *
+     * @param targetDirectory   the target directory for the beans
+     * @param propertyDirectory the target directory for any serialized properties
+     * @param exportBean        the bean to be generated
+     * @throws IOException               if there is an error writing
+     * @throws InvocationTargetException if there is an error accessing properties
+     * @throws IllegalAccessException    if there is an error accessing properties
+     * @throws NoSuchMethodException     if there is an error accessing methods
+     */
+    private void generateBeanJavaPoet(File targetDirectory, File propertyDirectory, ExportBean exportBean, File tmpDirectory) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+        if (new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java").exists()
+                || new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java").exists()
+                || new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + ".class").exists()
+                || new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.class").exists()) {
+            throw new IOException("Error creating Files for: " + exportBean + ". Maybe you have conflicting resources?");
+        }
+        //collect some necessary information beforehand to increase performance
+        List<ExportProperty> exportProperties = exportBean.getProperties();
+        List<ExportMethod> exportMethods = exportBean.getMethods();
+        List<ExportEvent> exportEvents = exportBean.getEvents();
+        List<BeanNode> beanNodes = exportBean.getBeans().getAllNodes();
+        List<FieldSpec> fields = new ArrayList<>();
+        List<MethodSpec> methods = new ArrayList<>();
+        List<Class<?>> interfaces = new ArrayList<>();
+        int hookupCounter = 0;
+
+        for (ExportMethod exportMethod : exportMethods) {
+            if (exportMethod.isImplementInterface()) {
+                interfaces.add(exportMethod.getDeclaringClass());
+            }
+        }
+
+
+        MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
+                .addModifiers(Modifier.PUBLIC)
+                .addCode("try {\n");
+
+        fields.add(FieldSpec.builder(long.class, "serialVersionUID")
+                .addModifiers(Modifier.FINAL, Modifier.PRIVATE, Modifier.STATIC)
+                .initializer("1L")
+                .build());
+
+        for (BeanNode node : beanNodes) {
+            fields.add(FieldSpec.builder(node.getData().getClass(), node.lowercaseFirst())
+                    .addModifiers(Modifier.PRIVATE)
+                    .build());
+            constructor.addCode("\t" + node.lowercaseFirst() + " = new " + node.getData().getClass().getCanonicalName() + "();\n");
+        }
+        for (BeanNode node : beanNodes) {
+            for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
+                constructor.addCode("\t" + edge.getHookup().getClass().getCanonicalName() + " " +
+                        "hookup" + hookupCounter + " = new " + edge.getHookup().getClass().getCanonicalName() + "();\n" +
+                        "\thookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");\n" +
+                        "\t" + edge.getStart().lowercaseFirst() + "." + edge.getEventSetDescriptor().getAddListenerMethod().getName() +
+                        "(hookup" + hookupCounter + ");\n");
+                hookupCounter++;
+            }
+            for (DirectCompositionEdge edge : node.getDirectCompositionEdges()) {
+                constructor.addCode("\t" + edge.getStart().lowercaseFirst() + "." + edge.getEventSetDescriptor().getAddListenerMethod().getName() + "(" + edge.getEnd().lowercaseFirst() + ");\n");
+            }
+            for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
+                String canonicalAdaperName = DEFAULT_ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();
+                constructor.addCode("\t" + canonicalAdaperName + " hookup" + hookupCounter + " = new " + canonicalAdaperName + "();\n" +
+                        "\thookup" + hookupCounter + ".setTarget(" + edge.getEnd().lowercaseFirst() + ");\n" +
+                        "\t" + edge.getStart().lowercaseFirst() + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");\n");
+                hookupCounter++;
+            }
+        }
+        for (ExportProperty property : exportProperties) {
+            Method getter = property.getPropertyDescriptor().getReadMethod();
+            Method setter = property.getPropertyDescriptor().getWriteMethod();
+
+            if (property.isSetDefaultValue()) {
+                Object value = getter.invoke(property.getNode().getData());
+                if (value == null || value instanceof Void || isPrimitiveOrPrimitiveWrapperOrString(value.getClass())) {
+                    constructor.addCode("\t" + property.getNode().lowercaseFirst() + "." + getter.getName() + "(" + StringUtil.convertPrimitive(value) + ");\n");
+                } else {
+                    File ser = new File(propertyDirectory.getAbsolutePath(), StringUtil.generateName(value.getClass().getSimpleName().toLowerCase() + "_", 100000000, 900000000) + ".ser");
+                    while (ser.exists()) {
+                        ser = new File(propertyDirectory.getAbsolutePath(), StringUtil.generateName(value.getClass().getSimpleName().toLowerCase() + "_", 100000000, 900000000) + ".ser");
+                    }
+                    ser.getParentFile().mkdirs();
+                    try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))) {
+                        out.writeObject(value);
+                        constructor.addCode("\ttry (java.io.ObjectInputStream in = new java.io.ObjectInputStream(getClass().getResourceAsStream(\""
+                                + StringUtil.getRelativePath(targetDirectory.getAbsolutePath(), ser, false) + "\"))){\n" +
+                                "\t\t" + property.getNode().lowercaseFirst() + "." + getter.getName()
+                                + "((" + property.getPropertyType().getCanonicalName() + ") in.readObject());\n" +
+                                "\t}\n");
+                    } catch (IOException i) {
+                        throw new IOException("Error serializing property: " + property.getNode().getName() + ":" + property.getName());
+                    }
+                }
+            }
+
+            String prefix = property.getPropertyType() == boolean.class || property.getPropertyType() == Boolean.class ?
+                    "is" : "get";
+
+            MethodSpec.Builder getBuilder = MethodSpec.methodBuilder(prefix + property.uppercaseFirst())
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(property.getPropertyType());
+
+            for (int i = 0; i < getter.getParameterTypes().length; i++) {
+                getBuilder.addParameter(getter.getParameterTypes()[i], "arg" + i);
+            }
+            for (int i = 0; i < getter.getExceptionTypes().length; i++) {
+                getBuilder.addException(getter.getExceptionTypes()[i]);
+            }
+            StringBuilder getterCall = new StringBuilder("return ").append(property.getNode().lowercaseFirst()).append(".").append(getter.getName()).append("(");
+            for (int i = 0; i < getter.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    getterCall.append("arg").append(i);
+                } else {
+                    getterCall.append(", arg").append(i);
+                }
+            }
+            getterCall.append(");\n");
+            methods.add(getBuilder.addCode(getterCall.toString()).build());
+
+            MethodSpec.Builder setBuilder = MethodSpec.methodBuilder("set" + property.uppercaseFirst())
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(void.class);
+
+            for (int i = 0; i < setter.getParameterTypes().length; i++) {
+                setBuilder.addParameter(setter.getParameterTypes()[i], "arg" + i);
+            }
+            for (int i = 0; i < setter.getExceptionTypes().length; i++) {
+                setBuilder.addException(setter.getExceptionTypes()[i]);
+            }
+            if (exportBean.isAddPropertyChangeSupport()) {
+                setBuilder.addCode("propertyChangeSupport.firePropertyChange(\"" + property.getName() + "\", " + property.getNode().lowercaseFirst() + "." + getter.getName() + "(), arg0);\n");
+            }
+            StringBuilder setterCall = new StringBuilder("").append(property.getNode().lowercaseFirst()).append(".").append(setter.getName()).append("(");
+            for (int i = 0; i < setter.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    setterCall.append("arg").append(i);
+                } else {
+                    setterCall.append(", arg").append(i);
+                }
+            }
+            setterCall.append(");\n");
+            methods.add(setBuilder.addCode(setterCall.toString()).build());
+        }
+
+        for (ExportEvent event : exportEvents) {
+            EventSetDescriptor esd = event.getEventSetDescriptor();
+            methods.add(MethodSpec.methodBuilder("add" + event.uppercaseFirst() + "EventListener")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(void.class)
+                    .addParameter(esd.getListenerType(), "listener")
+                    .addCode("" + event.getBeanNode().lowercaseFirst() + "." + esd.getAddListenerMethod().getName() + "(listener);")
+                    .build());
+            methods.add(MethodSpec.methodBuilder("remove" + event.uppercaseFirst() + "EventListener")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(void.class)
+                    .addParameter(esd.getListenerType(), "listener")
+                    .addCode("" + event.getBeanNode().lowercaseFirst() + "." + esd.getRemoveListenerMethod().getName() + "(listener);")
+                    .build());
+
+            if (event.getEventSetDescriptor().getGetListenerMethod() != null) {
+                methods.add(MethodSpec.methodBuilder("get" + event.uppercaseFirst() + "EventListeners")
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(esd.getGetListenerMethod().getReturnType())
+                        .addCode("return " + event.getBeanNode().lowercaseFirst() + "." + esd.getGetListenerMethod().getName() + "();")
+                        .build());
+            }
+        }
+
+        for (ExportMethod exportMethod : exportMethods) {
+            Method method = exportMethod.getMethodDescriptor().getMethod();
+            MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(method.getName())
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(method.getReturnType());
+
+            for (int i = 0; i < method.getParameterTypes().length; i++) {
+                methodBuilder.addParameter(method.getParameterTypes()[i], "arg" + i);
+            }
+            for (int i = 0; i < method.getExceptionTypes().length; i++) {
+                methodBuilder.addException(method.getExceptionTypes()[i]);
+            }
+            StringBuilder methodCall = new StringBuilder("").append(exportMethod.getNode().lowercaseFirst()).append(".").append(method.getName()).append("(");
+            for (int i = 0; i < method.getParameterTypes().length; i++) {
+                if (i == 0) {
+                    methodCall.append("arg").append(i);
+                } else {
+                    methodCall.append(", arg").append(i);
+                }
+            }
+            methodCall.append(");\n");
+            methods.add(methodBuilder.addCode(methodCall.toString()).build());
+        }
+
+        if (exportBean.isAddPropertyChangeSupport()) {
+            interfaces.add(PropertyChangeListener.class);
+            fields.add(FieldSpec.builder(PropertyChangeSupport.class, "propertyChangeSupport") //TODO: check that a bean does not have this name
+                    .addModifiers(Modifier.PRIVATE)
+                    .initializer("new PropertyChangeSupport(this)")
+                    .build());
+
+            methods.add(MethodSpec.methodBuilder("addPropertyChangeListener")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(void.class)
+                    .addParameter(PropertyChangeListener.class, "listener")
+                    .addCode("propertyChangeSupport.addPropertyChangeListener(listener);")
+                    .build());
+            methods.add(MethodSpec.methodBuilder("removePropertyChangeListener")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(void.class)
+                    .addParameter(PropertyChangeListener.class, "listener")
+                    .addCode("propertyChangeSupport.removePropertyChangeListener(listener);")
+                    .build());
+            methods.add(MethodSpec.methodBuilder("getPropertyChangeListeners")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(PropertyChangeListener[].class)
+                    .addParameter(PropertyChangeListener.class, "listener")
+                    .addCode("return propertyChangeSupport.getPropertyChangeListeners();")
+                    .build());
+            methods.add(MethodSpec.methodBuilder("propertyChange")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(void.class)
+                    .addAnnotation(Override.class)
+                    .addParameter(PropertyChangeEvent.class, "evt")
+                    .build());
+        }
+
+        constructor.addCode("} catch (Exception e) {\n" +
+                "\te.printStackTrace();\n" +
+                "}\n");
+
+        TypeSpec.Builder bean = TypeSpec.classBuilder(exportBean.getBeanName())
+                .addModifiers(Modifier.PUBLIC)
+                .addMethod(constructor.build())
+                .addSuperinterface(Serializable.class);
+
+        for (Class clz : interfaces) {
+            bean.addSuperinterface(clz);
+        }
+        bean.addMethods(methods);
+        bean.addFields(fields);
+
+        JavaFile.builder(DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), bean.build())
+                .build().writeTo(tmpDirectory);
+
+        //generate BeanInfo class
+
+        MethodSpec.Builder propertyDescriptor = MethodSpec.methodBuilder("getPropertyDescriptors")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(PropertyDescriptor[].class);
+
+        if (exportProperties.isEmpty()) {
+            propertyDescriptor.addCode("return new PropertyDescriptor[]{};");
+        } else {
+            propertyDescriptor.addCode("try {\n");
+            propertyDescriptor.addCode("\tClass<?> cls = " + exportBean.getBeanName() + ".class;\n");
+            StringBuilder propertyDescriptorArray = new StringBuilder("{");
+            for (ExportProperty exportProperty : exportProperties) {
+                String descriptorName = StringUtil.generateName("pd" + exportProperty.uppercaseFirst() + "_", 10000, 90000);
+                propertyDescriptor.addCode("\tPropertyDescriptor " + descriptorName + " = new PropertyDescriptor(\"" + exportProperty.getName() + "\", cls);\n");
+                propertyDescriptor.addCode("\t" + descriptorName + ".setDisplayName(\"" + exportProperty.getPropertyDescriptor().getDisplayName() + "\");\n");
+                if (exportProperty.getPropertyDescriptor().getPropertyEditorClass() != null) {
+                    propertyDescriptor.addCode("\t" + descriptorName + ".setPropertyEditorClass(" + exportProperty.getPropertyDescriptor().getPropertyEditorClass().getCanonicalName() + ".class);\n");
+                }
+                if (propertyDescriptorArray.length() > 1) {
+                    propertyDescriptorArray.append(", ").append(descriptorName);
+                } else {
+                    propertyDescriptorArray.append(descriptorName);
+                }
+            }
+            propertyDescriptorArray.append("}");
+            propertyDescriptor.addCode("\treturn new PropertyDescriptor[]" + propertyDescriptorArray + ";\n");
+            propertyDescriptor.addCode("} catch (java.beans.IntrospectionException e) {\n");
+            propertyDescriptor.addCode("\te.printStackTrace();\n");
+            propertyDescriptor.addCode("}\n");
+            propertyDescriptor.addCode("return null;\n");
+        }
+
+        MethodSpec.Builder eventSetDescriptor = MethodSpec.methodBuilder("getEventSetDescriptors")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(EventSetDescriptor[].class);
+
+        if (!exportEvents.isEmpty()) {
+            eventSetDescriptor.addCode("try {\n");
+            eventSetDescriptor.addCode("\tClass<?> cls = " + exportBean.getBeanName() + ".class;\n");
+            StringBuilder eventSetDescriptorArray = new StringBuilder("{");
+            if (exportBean.isAddPropertyChangeSupport()) {
+                eventSetDescriptor.addCode("\tEventSetDescriptor esdPropertyChange = new EventSetDescriptor(cls, \"propertyChange\", java.beans.PropertyChangeListener.class, \"propertyChange\");\n");
+                eventSetDescriptorArray.append("esdPropertyChange");
+            }
+            for (ExportEvent exportEvent : exportEvents) {
+                StringBuilder listenerMethodsArray = new StringBuilder("{");
+                for (Method method : exportEvent.getEventSetDescriptor().getListenerMethods()) {
+                    if (listenerMethodsArray.length() > 1) {
+                        listenerMethodsArray.append(", ").append("\"").append(method.getName()).append("\"");
+                    } else {
+                        listenerMethodsArray.append("\"").append(method.getName()).append("\"");
+                    }
+                }
+                String descriptorName = StringUtil.generateName("esd" + exportEvent.uppercaseFirst() + "_", 10000, 90000);
+                eventSetDescriptor.addCode("\tEventSetDescriptor " + descriptorName + " = new EventSetDescriptor(cls, \"" + exportEvent.getName() + "\", "
+                        + exportEvent.getEventSetDescriptor().getListenerType().getCanonicalName() + ".class, new String[]" + listenerMethodsArray.toString() + "}, " +
+                        "\"add" + exportEvent.uppercaseFirst() + "EventListener\", \"remove" + exportEvent.uppercaseFirst() + "EventListener\");\n");
+
+                if (eventSetDescriptorArray.length() > 1) {
+                    eventSetDescriptorArray.append(", ").append(descriptorName);
+                } else {
+                    eventSetDescriptorArray.append(descriptorName);
+                }
+            }
+            eventSetDescriptorArray.append("}");
+            eventSetDescriptor.addCode("\treturn new EventSetDescriptor[]" + eventSetDescriptorArray + ";\n");
+            eventSetDescriptor.addCode("} catch (java.beans.IntrospectionException e) {\n");
+            eventSetDescriptor.addCode("\te.printStackTrace();\n");
+            eventSetDescriptor.addCode("}\n");
+            eventSetDescriptor.addCode("return null;\n");
+        } else {
+            eventSetDescriptor.addCode("\t\treturn new EventSetDescriptor[]{};\n");
+        }
+
+        MethodSpec.Builder methodDescriptor = MethodSpec.methodBuilder("getMethodDescriptors")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(MethodDescriptor[].class);
+
+        if (!exportEvents.isEmpty()) {
+            methodDescriptor.addCode("try {\n");
+            methodDescriptor.addCode("\tClass<?> cls = " + exportBean.getBeanName() + ".class;\n");
+            StringBuilder methodDescriptorArray = new StringBuilder("{");
+            for (ExportMethod exportMethod : exportMethods) {
+                StringBuilder classArray = new StringBuilder();
+                for (Class parameter : exportMethod.getMethodDescriptor().getMethod().getParameterTypes()) {
+                    if (classArray.length() > 1) {
+                        classArray.append(", ").append(parameter.getCanonicalName()).append(".class");
+                    } else {
+                        classArray.append(parameter.getCanonicalName()).append(".class");
+                    }
+                }
+                String descriptorName = StringUtil.generateName("md" + exportMethod.uppercaseFirst() + "_", 10000, 90000);
+                methodDescriptor.addCode("\tMethodDescriptor " + descriptorName + " = new MethodDescriptor(cls.getMethod(\"" + exportMethod.getName()
+                        + "\", new Class<?>[]{" + classArray + "}), null);\n");
+                if (methodDescriptorArray.length() > 1) {
+                    methodDescriptorArray.append(", ").append(descriptorName);
+                } else {
+                    methodDescriptorArray.append(descriptorName);
+                }
+            }
+            methodDescriptorArray.append("}");
+            methodDescriptor.addCode("\treturn new MethodDescriptor[]" + methodDescriptorArray + ";\n");
+            methodDescriptor.addCode("} catch (java.lang.NoSuchMethodException e) {\n");
+            methodDescriptor.addCode("\te.printStackTrace();\n");
+            methodDescriptor.addCode("}\n");
+            methodDescriptor.addCode("return null;\n");
+        } else {
+            methodDescriptor.addCode("return new MethodDescriptor[]{};\n");
+        }
+
+        FieldSpec suid = FieldSpec.builder(long.class, "serialVersionUID")
+                .addModifiers(Modifier.FINAL, Modifier.PRIVATE, Modifier.STATIC)
+                .initializer("1L")
+                .build();
+
+        TypeSpec.Builder beanInfo = TypeSpec.classBuilder(exportBean.getBeanName() + "BeanInfo")
+                .superclass(SimpleBeanInfo.class)
+                .addModifiers(Modifier.PUBLIC)
+                .addMethod(propertyDescriptor.build())
+                .addMethod(eventSetDescriptor.build())
+                .addMethod(methodDescriptor.build())
+                .addField(suid)
+                .addSuperinterface(Serializable.class);
+
+        JavaFile.builder(DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), beanInfo.build())
+                .build().writeTo(tmpDirectory);
+    }
+
+    /**
+     * Traverses the class tree upwards to collect all extended or implemented classes.
+     *
+     * @param clazz the class to get the information for
+     * @return returns a list of extended or implemented classes
+     */
     private static Set<Class<?>> getAllExtendedOrImplementedTypes(Class<?> clazz) {
         List<Class<?>> res = new ArrayList<>();
 
@@ -748,7 +1207,7 @@ public class Exporter {
                 while (ser.exists()) {
                     ser = new File(propertyDirectory.getAbsolutePath(), StringUtil.generateName(value.getClass().getSimpleName().toLowerCase() + "_", 100000000, 900000000) + ".ser");
                 }
-                if(!ser.getParentFile().mkdirs()) throw new IOException("Could not create property directory.");
+                if (!ser.getParentFile().mkdirs()) throw new IOException("Could not create property directory.");
                 try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(ser))) {
                     out.writeObject(value);
                     writer.println("\t\t\ttry (java.io.ObjectInputStream in = new java.io.ObjectInputStream(getClass().getResourceAsStream(\""
