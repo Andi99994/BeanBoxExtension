@@ -46,7 +46,6 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -58,7 +57,7 @@ import java.util.Vector;
 import javax.infobus.InfoBus;
 import javax.infobus.InfoBusMember;
 
-import sun.beanbox.export.ExportDialog;
+import sun.beanbox.export.components.ExportDialog;
 import sun.beanbox.export.Exporter;
 import sunw.beanbox.AppletSupport;
 import sunw.demo.methodtracer.MethodTracer;

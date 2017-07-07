@@ -228,6 +228,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
             System.err.println("        bean = " + bean);
             return;
         }
+        et.setEventSetDescriptor(esd);
         Method adder = esd.getAddListenerMethod();
         Method remover = esd.getRemoveListenerMethod();
         if (adder == null || remover == null) {
@@ -1073,6 +1074,7 @@ public class Wrapper extends Panel implements Serializable, MouseListener,
                 eventTarget.setEventSetName(entry.getKey());
                 eventTarget.setTargetBean(target);
                 eventTarget.setTargetListener(target);
+                eventTarget.setEventSetDescriptor((EventSetDescriptor) esdMap.get(entry.getKey()));
                 listeners.add(eventTarget);
             }
         }

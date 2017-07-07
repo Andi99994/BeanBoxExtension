@@ -1,6 +1,7 @@
-package sun.beanbox.export;
+package sun.beanbox.export.components;
 
 import sun.beanbox.ErrorDialog;
+import sun.beanbox.export.Exporter;
 import sun.beanbox.export.components.*;
 import sun.beanbox.export.datastructure.*;
 
@@ -24,6 +25,10 @@ public class ExportDialog extends JDialog {
     private Exporter exporter;
 
     private JTree tree;
+
+    private static final String PROPERTY_NODE_LABEL = "Properties";
+    private static final String EVENT_NODE_LABEL = "Events";
+    private static final String METHOD_NODE_LABEL = "Methods";
 
     /**
      * This constructor sets up all UI components required for the export configuration.
@@ -175,30 +180,25 @@ public class ExportDialog extends JDialog {
      */
     private void createNodes(DefaultMutableTreeNode top, List<ExportBean> exportBeans) {
         for (ExportBean exportBean : exportBeans) {
-            DefaultMutableTreeNode secondLevel = new DefaultMutableTreeNode(exportBean.getBeanName());
-            secondLevel.setUserObject(exportBean);
+            DefaultMutableTreeNode secondLevel = new DefaultMutableTreeNode(exportBean);
             for (BeanNode node : exportBean.getBeans().getAllNodes()) {
-                DefaultMutableTreeNode thirdLevel = new DefaultMutableTreeNode(node.getName());
-                thirdLevel.setUserObject(node);
-                DefaultMutableTreeNode fourthLevelProperties = new DefaultMutableTreeNode("Properties");
+                DefaultMutableTreeNode thirdLevel = new DefaultMutableTreeNode(node);
+                DefaultMutableTreeNode fourthLevelProperties = new DefaultMutableTreeNode(PROPERTY_NODE_LABEL);
                 thirdLevel.add(fourthLevelProperties);
                 for (ExportProperty property : node.getProperties()) {
-                    DefaultMutableTreeNode fifthLevelProperties = new DefaultMutableTreeNode(property.toString());
-                    fifthLevelProperties.setUserObject(property);
+                    DefaultMutableTreeNode fifthLevelProperties = new DefaultMutableTreeNode(property);
                     fourthLevelProperties.add(fifthLevelProperties);
                 }
-                DefaultMutableTreeNode fourthLevelEvents = new DefaultMutableTreeNode("Events");
+                DefaultMutableTreeNode fourthLevelEvents = new DefaultMutableTreeNode(EVENT_NODE_LABEL);
                 thirdLevel.add(fourthLevelEvents);
                 for (ExportEvent event : node.getEvents()) {
-                    DefaultMutableTreeNode fifthLevelEvents = new DefaultMutableTreeNode(event.toString());
-                    fifthLevelEvents.setUserObject(event);
+                    DefaultMutableTreeNode fifthLevelEvents = new DefaultMutableTreeNode(event);
                     fourthLevelEvents.add(fifthLevelEvents);
                 }
-                DefaultMutableTreeNode fourthLevelMethods = new DefaultMutableTreeNode("Methods");
+                DefaultMutableTreeNode fourthLevelMethods = new DefaultMutableTreeNode(METHOD_NODE_LABEL);
                 thirdLevel.add(fourthLevelMethods);
                 for (ExportMethod method : node.getMethods()) {
-                    DefaultMutableTreeNode fifthLevelMethods = new DefaultMutableTreeNode(method.toString());
-                    fifthLevelMethods.setUserObject(method);
+                    DefaultMutableTreeNode fifthLevelMethods = new DefaultMutableTreeNode(method);
                     fourthLevelMethods.add(fifthLevelMethods);
                 }
                 secondLevel.add(thirdLevel);
@@ -209,6 +209,7 @@ public class ExportDialog extends JDialog {
 
     /**
      * This method changes the content of the configurator view depending on which node has been selected.
+     * Unfortunately Swing is not generic and because of that we need to check for instances.
      *
      * @param panel the panel that should display the content.
      */
@@ -235,6 +236,19 @@ public class ExportDialog extends JDialog {
             } else if (treeNode.getUserObject() instanceof ExportEvent) {
                 panel.setViewportView(new ExportEventEditor(exporter, (ExportEvent) treeNode.getUserObject(), tree, treeNode));
                 return;
+            } else if (treeNode.getUserObject() instanceof String) {
+                String text = (String) treeNode.getUserObject();
+                switch (text) {
+                    case PROPERTY_NODE_LABEL:
+                        panel.setViewportView(new AllPropertiesEditor(exporter, tree, treeNode));
+                        return;
+                    case EVENT_NODE_LABEL:
+                        panel.setViewportView(new AllEventsEditor(exporter, tree, treeNode));
+                        return;
+                    case METHOD_NODE_LABEL:
+                        panel.setViewportView(new AllMethodsEditor(exporter, tree, treeNode));
+                        return;
+                }
             }
         }
         panel.setViewportView(new JLabel("Select a node to edit it"));

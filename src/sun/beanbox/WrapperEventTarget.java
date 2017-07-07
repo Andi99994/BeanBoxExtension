@@ -13,6 +13,7 @@ public class WrapperEventTarget implements Serializable {
     private Object targetBean;
     private Object targetListener;
     private String path;
+    private EventSetDescriptor eventSetDescriptor;
 
     public static long getSerialVersionUID() {
         return serialVersionUID;
@@ -48,5 +49,13 @@ public class WrapperEventTarget implements Serializable {
 
     public void setPath(String path) {
         this.path = path;
+    }
+
+    public void setEventSetDescriptor(EventSetDescriptor eventSetDescriptor) {
+        this.eventSetDescriptor = eventSetDescriptor;
+    }
+
+    public EventSetDescriptor getEventSetDescriptor() {
+        return eventSetDescriptor;
     }
 }
