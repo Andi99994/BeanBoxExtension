@@ -15,6 +15,8 @@ import java.util.zip.ZipEntry;
 
 /**
  * Created by Andreas on 07.07.2017.
+ *
+ * Util class to compile and pack resources into a JAR file.
  */
 public class JARCompiler {
 

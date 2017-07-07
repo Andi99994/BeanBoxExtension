@@ -238,15 +238,23 @@ public class ExportDialog extends JDialog {
                 return;
             } else if (treeNode.getUserObject() instanceof String) {
                 String text = (String) treeNode.getUserObject();
+                BeanNode bean = null;
+                DefaultMutableTreeNode current = treeNode;
+                while (bean == null) {
+                    current = (DefaultMutableTreeNode) current.getParent();
+                    if (current.getUserObject() instanceof BeanNode) {
+                        bean = (BeanNode) current.getUserObject();
+                    }
+                }
                 switch (text) {
                     case PROPERTY_NODE_LABEL:
-                        panel.setViewportView(new AllPropertiesEditor(exporter, tree, treeNode));
+                        panel.setViewportView(new AllPropertiesEditor(bean));
                         return;
                     case EVENT_NODE_LABEL:
-                        panel.setViewportView(new AllEventsEditor(exporter, tree, treeNode));
+                        panel.setViewportView(new AllEventsEditor(bean));
                         return;
                     case METHOD_NODE_LABEL:
-                        panel.setViewportView(new AllMethodsEditor(exporter, tree, treeNode));
+                        panel.setViewportView(new AllMethodsEditor(bean));
                         return;
                 }
             }

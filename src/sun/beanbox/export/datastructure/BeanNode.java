@@ -1,14 +1,12 @@
 package sun.beanbox.export.datastructure;
 
-import sun.beanbox.JarInfo;
-
 import java.beans.IntrospectionException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Created by Andi on 26.05.2017.
+ * Created by Andreas on 26.05.2017.
  */
 public class BeanNode {
 
@@ -46,17 +44,17 @@ public class BeanNode {
 
     public List<DirectCompositionEdge> getDirectCompositionEdges() {
         return edges.stream().filter(beanEdge -> beanEdge instanceof DirectCompositionEdge)
-                .map(beanEdge -> (DirectCompositionEdge)beanEdge).collect(Collectors.toList());
+                .map(beanEdge -> (DirectCompositionEdge) beanEdge).collect(Collectors.toList());
     }
 
     public List<AdapterCompositionEdge> getAdapterCompositionEdges() {
         return edges.stream().filter(beanEdge -> beanEdge instanceof AdapterCompositionEdge)
-                .map(beanEdge -> (AdapterCompositionEdge)beanEdge).collect(Collectors.toList());
+                .map(beanEdge -> (AdapterCompositionEdge) beanEdge).collect(Collectors.toList());
     }
 
     public List<PropertyBindingEdge> getPropertyBindingEdges() {
         return edges.stream().filter(beanEdge -> beanEdge instanceof PropertyBindingEdge)
-                .map(beanEdge -> (PropertyBindingEdge)beanEdge).collect(Collectors.toList());
+                .map(beanEdge -> (PropertyBindingEdge) beanEdge).collect(Collectors.toList());
     }
 
     public void addEdge(BeanEdge edge) {
@@ -86,7 +84,7 @@ public class BeanNode {
 
     public String lowercaseFirst() {
         char c[] = getName().toCharArray();
-        if(Character.isLetter(c[0])) {
+        if (Character.isLetter(c[0])) {
             c[0] = Character.toLowerCase(c[0]);
         }
         return new String(c);
@@ -118,5 +116,50 @@ public class BeanNode {
 
     public void setOutputInterface(boolean outputInterface) {
         this.outputInterface = outputInterface;
+    }
+
+    public boolean isAllPropertiesConfigurable() {
+        for (ExportProperty property : properties) {
+            if (!property.isExport()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public void setAllPropertiesConfigurable(boolean configurable) {
+        for (ExportProperty property : properties) {
+            property.setExport(configurable);
+        }
+    }
+
+    public boolean isAllEventsInOutputInterface() {
+        for (ExportEvent event : events) {
+            if (!event.isInclude()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public void setAllEventsInOutputInterface(boolean included) {
+        for (ExportEvent event : events) {
+            event.setInclude(included);
+        }
+    }
+
+    public boolean isAllMethodsInInputInterface() {
+        for (ExportMethod method : methods) {
+            if (!method.isInclude()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public void setAllMethodsInInputInterface(boolean included) {
+        for (ExportMethod method : methods) {
+            method.setInclude(included);
+        }
     }
 }
