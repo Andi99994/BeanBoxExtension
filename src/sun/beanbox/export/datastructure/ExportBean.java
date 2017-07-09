@@ -98,6 +98,10 @@ public class ExportBean {
         this.addPropertyChangeSupport = addPropertyChangeSupport;
     }
 
+    public List<Class> getImplementedInterfaces() {
+        return getMethods().stream().filter(exportMethod -> exportMethod.getDeclaringClass() != null).map(ExportMethod::getDeclaringClass).collect(Collectors.toList());
+    }
+
     @Override
     public String toString() {
         return name;

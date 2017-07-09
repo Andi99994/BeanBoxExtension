@@ -50,7 +50,6 @@ public class Exporter {
     private Set<String> resourceNames = new HashSet<>();
     private boolean keepSources = false;
 
-    private static final String TMP_DIRECTORY_NAME = "/tmp";
     private static final String MANIFEST_DIRECTORY_NAME = "META-INF";
     private static final String BEAN_DIRECTORY_NAME = "beanBox/generated/beans";
     private static final String SERIALIZED_PROPERTIES_DIRECTORY_NAME = "beanBox/generated/beans/properties";
@@ -429,13 +428,14 @@ public class Exporter {
         if (!filename.endsWith(".jar")) filename += ".jar";
         File target = new File(directory, filename);
         int counter = 0;
-        while (new File(directory + TMP_DIRECTORY_NAME + counter).exists()) {
+        String currentName = directory + "/" + filename.substring(0, filename.length() - 4) + "_tmp";
+        while (new File(currentName).exists()) {
+            currentName = directory + "/" + filename.substring(0, filename.length() - 4) + "_tmp" + counter;
             counter++;
         }
-        String tempDirectory = TMP_DIRECTORY_NAME + counter;
         List<ExportConstraintViolation> violations = validateConfiguration();
         if (violations == null) {
-            File tmpDirectory = new File(directory + tempDirectory);
+            File tmpDirectory = new File(currentName);
             File tmpBeanDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + BEAN_DIRECTORY_NAME);
             File tmpPropertiesDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + SERIALIZED_PROPERTIES_DIRECTORY_NAME);
             File tmpManifestDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + MANIFEST_DIRECTORY_NAME);
@@ -1142,10 +1142,10 @@ public class Exporter {
         if (RESERVED_CLASS_NAME_POOL.contains(text)) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with reserved class name."));
         }
-        if (resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".java")
-                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class")
-                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.java")
-                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.class")) {
+        if (resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + text + ".java")
+                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + text + ".class")
+                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + text + "BeanInfo.java")
+                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + text + "BeanInfo.class")) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with resource."));
         }
         for (ExportBean bean : exportBeans) {
@@ -1364,7 +1364,6 @@ public class Exporter {
      * Validates if the current configuration is exportable.
      * <p>
      * //TODO: Validate interfacing to avoid partial interface implementation which leads to compiler errors
-     * //TODO: Validate resource conflicts
      *
      * @return returns a list of constraint violations or null if there are none
      */
@@ -1378,8 +1377,32 @@ public class Exporter {
             for (ExportProperty property : bean.getProperties()) {
                 addAllIfNotNull(checkIfValidPropertyName(bean, property, property.getName()), violations);
             }
-            for (ExportMethod method : bean.getMethods()) {
+            Map<Method, Class<?>> methodMap = new HashMap<>();
+            for (Class<?> clz : bean.getImplementedInterfaces()) {
+                for (Method method : clz.getDeclaredMethods()) {
+                    methodMap.put(method, clz);
+                }
+            }
+            List<ExportMethod> exportMethods = bean.getMethods();
+            for (ExportMethod method : exportMethods) {
                 addAllIfNotNull(checkIfValidMethodName(bean, method, method.getName()), violations);
+                if (method.getDeclaringClass() != null) {
+                    String methodName = method.getMethodDescriptor().getMethod().getName();
+                    Class<?>[] parameters = method.getMethodDescriptor().getMethod().getParameterTypes();
+                    List<Method> remove = new ArrayList<>();
+                    for (Method method1 : methodMap.keySet()) {
+                        if (method1.getName().equals(methodName) && Arrays.equals(method1.getParameterTypes(), parameters)) {
+                            remove.add(method1);
+                        }
+                    }
+                    for (Method rem : remove) {
+                        methodMap.remove(rem);
+                    }
+                }
+            }
+            for (Map.Entry<Method, Class<?>> entry : methodMap.entrySet()) {
+                violations.add(new ExportConstraintViolation("Method " + entry.getKey().getName() + " of interface " + entry.getValue().getName()
+                        + " not implemented. EventListener interfaces with multiple methods can only be implemented fully!"));
             }
             for (ExportEvent event : bean.getEvents()) {
                 addAllIfNotNull(checkIfValidEventName(bean, event, event.getName()), violations);
