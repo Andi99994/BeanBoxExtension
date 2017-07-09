@@ -49,12 +49,4 @@ public class ExportEvent {
     public void setInclude(boolean include) {
         this.include = include;
     }
-
-    public String uppercaseFirst() {
-        char c[] = getName().toCharArray();
-        if(Character.isLetter(c[0])) {
-            c[0] = Character.toUpperCase(c[0]);
-        }
-        return new String(c);
-    }
 }

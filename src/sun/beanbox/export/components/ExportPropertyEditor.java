@@ -3,6 +3,7 @@ package sun.beanbox.export.components;
 import sun.beanbox.export.Exporter;
 import sun.beanbox.export.datastructure.ExportBean;
 import sun.beanbox.export.datastructure.ExportProperty;
+import sun.beanbox.export.util.StringUtil;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -43,16 +44,21 @@ public class ExportPropertyEditor extends JPanel {
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("The name of the property. It must be unique among all configurable properties in this ExportBean and be a valid Java identifier.");
         TextField nameText = new TextField(exportProperty.getName());
-        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidPropertyName(exportBean, nameText.getText()) ? "Valid name" : "Invalid name");
+        java.util.List<ExportConstraintViolation> violationList = exporter.checkIfValidPropertyName(exportBean, exportProperty, nameText.getText());
+        JLabel nameCheckLabel = new JLabel(violationList == null ? "Valid name" : "Invalid name");
+        nameCheckLabel.setToolTipText(violationList == null ? "No constraint violations found." : StringUtil.concatenateViolations(violationList));
         final ExportBean finalExportBean = exportBean;
         nameText.addTextListener(e -> {
-            if (exporter.checkIfValidPropertyName(finalExportBean, nameText.getText())) {
+            java.util.List<ExportConstraintViolation> violations = exporter.checkIfValidPropertyName(finalExportBean, exportProperty, nameText.getText());
+            if (violations == null) {
                 exportProperty.setName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
+                nameCheckLabel.setToolTipText("No constraint violations found.");
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
                 model.nodeChanged(treeNode);
             } else {
                 nameCheckLabel.setText("Invalid name");
+                nameCheckLabel.setToolTipText(StringUtil.concatenateViolations(violations));
             }
         });
         nameText.setColumns(22);

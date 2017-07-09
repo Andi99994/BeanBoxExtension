@@ -82,14 +82,6 @@ public class BeanNode {
         return methods;
     }
 
-    public String lowercaseFirst() {
-        char c[] = getName().toCharArray();
-        if (Character.isLetter(c[0])) {
-            c[0] = Character.toLowerCase(c[0]);
-        }
-        return new String(c);
-    }
-
     public String getJarPath() {
         return jarPath;
     }

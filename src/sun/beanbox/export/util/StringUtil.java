@@ -1,6 +1,9 @@
 package sun.beanbox.export.util;
 
+import sun.beanbox.export.components.ExportConstraintViolation;
+
 import java.io.File;
+import java.util.List;
 import java.util.Random;
 import java.util.regex.Pattern;
 
@@ -80,5 +83,29 @@ public class StringUtil {
         in = in.replace(Pattern.quote("\""), "\\\"");
         in = in.replace(Pattern.quote("\'"), "\\\'");
         return in;
+    }
+
+    public static String uppercaseFirst(String text) {
+        char c[] = text.toCharArray();
+        if(Character.isLetter(c[0])) {
+            c[0] = Character.toUpperCase(c[0]);
+        }
+        return new String(c);
+    }
+
+    public static String lowercaseFirst(String text) {
+        char c[] = text.toCharArray();
+        if (Character.isLetter(c[0])) {
+            c[0] = Character.toLowerCase(c[0]);
+        }
+        return new String(c);
+    }
+
+    public static String concatenateViolations(List<ExportConstraintViolation> violations) {
+        StringBuilder text = new StringBuilder();
+        for (ExportConstraintViolation violation : violations) {
+            text.append(violation.getMessage()).append(" ");
+        }
+        return text.toString();
     }
 }

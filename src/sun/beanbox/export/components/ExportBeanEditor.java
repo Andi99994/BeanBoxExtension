@@ -2,6 +2,7 @@ package sun.beanbox.export.components;
 
 import sun.beanbox.export.Exporter;
 import sun.beanbox.export.datastructure.ExportBean;
+import sun.beanbox.export.util.StringUtil;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -28,17 +29,22 @@ public class ExportBeanEditor extends JPanel {
 
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("Configure the name of the bean. The name must be a valid Java identifier and must not be a keyword. " +
-                "Pay attention that it does not conflict with any resources that you are including.");
+                "Pay attention that it does not conflict with any beans or resources that you are including.");
         TextField nameText = new TextField(exportBean.getBeanName());
-        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidClassName(nameText.getText()) ? "Valid name" : "Invalid name");
+        java.util.List<ExportConstraintViolation> violationList = exporter.checkIfValidClassName(exportBean, nameText.getText());
+        JLabel nameCheckLabel = new JLabel(violationList == null ? "Valid name" : "Invalid name");
+        nameCheckLabel.setToolTipText(violationList == null ? "No constraint violations found." : StringUtil.concatenateViolations(violationList));
         nameText.addTextListener(e -> {
-            if (exporter.checkIfValidClassName(nameText.getText())) {
+            java.util.List<ExportConstraintViolation> violations = exporter.checkIfValidClassName(exportBean, nameText.getText());
+            if (violations == null) {
                 exportBean.setBeanName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
+                nameCheckLabel.setToolTipText("No constraint violations found.");
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
                 model.nodeChanged(treeNode);
             } else {
                 nameCheckLabel.setText("Invalid name");
+                nameCheckLabel.setToolTipText(StringUtil.concatenateViolations(violations));
             }
         });
         nameText.setColumns(30);

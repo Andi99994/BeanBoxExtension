@@ -18,8 +18,8 @@ public class ExportBean {
         this.beanName = beanName;
     }
 
-    public BeanGraph getBeans() {
-        return beans;
+    public List<BeanNode> getBeans() {
+        return beans.getAllNodes();
     }
 
     public void setBean(BeanGraph beans) {

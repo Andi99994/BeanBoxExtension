@@ -2,6 +2,7 @@ package sun.beanbox.export.components;
 
 import sun.beanbox.export.Exporter;
 import sun.beanbox.export.datastructure.*;
+import sun.beanbox.export.util.StringUtil;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -39,16 +40,21 @@ public class BeanNodeEditor extends JPanel {
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("The name of the bean. It must be unique among all beans in this ExportBean and be a valid Java identifier.");
         TextField nameText = new TextField(beanNode.getName());
-        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidPropertyName(exportBean, nameText.getText()) ? "Valid name" : "Invalid name");
+        java.util.List<ExportConstraintViolation> violationList = exporter.checkIfValidNodeName(exportBean, beanNode, nameText.getText());
+        JLabel nameCheckLabel = new JLabel(violationList == null ? "Valid name" : "Invalid name");
+        nameCheckLabel.setToolTipText(violationList == null ? "No constraint violations found." : StringUtil.concatenateViolations(violationList));
         final ExportBean finalExportBean = exportBean;
         nameText.addTextListener(e -> {
-            if (exporter.checkIfValidPropertyName(finalExportBean, nameText.getText())) {
+            java.util.List<ExportConstraintViolation> violations = exporter.checkIfValidNodeName(finalExportBean, beanNode, nameText.getText());
+            if (violations == null) {
                 beanNode.setName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
+                nameCheckLabel.setToolTipText("No constraint violations found.");
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
                 model.nodeChanged(treeNode);
             } else {
                 nameCheckLabel.setText("Invalid name");
+                nameCheckLabel.setToolTipText(StringUtil.concatenateViolations(violations));
             }
         });
         nameText.setColumns(22);

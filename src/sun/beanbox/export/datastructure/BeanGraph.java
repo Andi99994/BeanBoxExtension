@@ -1,22 +1,19 @@
 package sun.beanbox.export.datastructure;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * Created by Andi on 26.05.2017.
+ * Created by Andreas on 26.05.2017.
  */
 public class BeanGraph {
 
-    private List<BeanNode> inputNodes = new LinkedList<>();
-    private List<BeanNode> outputNodes = new LinkedList<>();
     private List<BeanNode> allNodes = new LinkedList<>();
 
     public BeanGraph(Collection<BeanNode> inputNodes, Collection<BeanNode> outputNodes, Collection<BeanNode> allNodes){
-        this.inputNodes.addAll(inputNodes);
         for(BeanNode node : inputNodes) {
             node.setInputInterface(true);
         }
-        this.outputNodes.addAll(outputNodes);
         for(BeanNode node : outputNodes) {
             node.setOutputInterface(true);
         }
@@ -31,35 +28,20 @@ public class BeanGraph {
                 }
                 beanName+= counter;
                 node.setName(beanName);
-                for (ExportProperty property : node.getProperties()) {
-                    property.setName(property.getName() + counter);
-                }
             }
             beanNames.add(beanName);
         }
     }
 
-    public List<BeanNode> getInputNodes() {
-        return inputNodes;
+    List<BeanNode> getInputNodes() {
+        return allNodes.stream().filter(BeanNode::isInputInterface).collect(Collectors.toList());
     }
 
-    public void setInputNodes(List<BeanNode> inputNodes) {
-        this.inputNodes = inputNodes;
+    List<BeanNode> getOutputNodes() {
+        return allNodes.stream().filter(BeanNode::isOutputInterface).collect(Collectors.toList());
     }
 
-    public List<BeanNode> getOutputNodes() {
-        return outputNodes;
-    }
-
-    public void setOutputNodes(List<BeanNode> outputNodes) {
-        this.outputNodes = outputNodes;
-    }
-
-    public List<BeanNode> getAllNodes() {
+    List<BeanNode> getAllNodes() {
         return allNodes;
-    }
-
-    public void setAllNodes(List<BeanNode> allNodes) {
-        this.allNodes = allNodes;
     }
 }

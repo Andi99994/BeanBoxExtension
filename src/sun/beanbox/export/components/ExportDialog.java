@@ -81,20 +81,36 @@ public class ExportDialog extends JDialog {
                         setEnabled(false);
                         //Start the exporting process.
                         try {
-                            exporter.export(fd.getDirectory(), fd.getFile());
+                            List<ExportConstraintViolation> violations = exporter.export(fd.getDirectory(), fd.getFile());
+                            if(violations != null) {
+                                SwingUtilities.invokeLater(() -> {
+                                    setGlassPane(glassPane);
+                                    for (Component component : getComponents()) {
+                                        component.setEnabled(false);
+                                    }
+                                    setEnabled(true);
+                                    statusLabel.setText("Failed!");
+                                    StringBuilder errorText = new StringBuilder();
+                                    for (ExportConstraintViolation violation : violations) {
+                                        errorText.append(violation.getMessage()).append("\n");
+                                    }
+                                    JOptionPane.showMessageDialog(this, errorText, "Please resolve the following conflicts before exporting",
+                                            JOptionPane.ERROR_MESSAGE);
+                                });
+                            } else {
+                                SwingUtilities.invokeLater(() -> {
+                                    setGlassPane(glassPane);
+                                    for (Component component : getComponents()) {
+                                        component.setEnabled(false);
+                                    }
+                                    setEnabled(true);
+                                    statusLabel.setText("Finished!");
+                                });
+                            }
                         } catch (Exception ex) {
                             ex.printStackTrace();
                             SwingUtilities.invokeLater(() -> new ErrorDialog(owner, ex.getMessage()));
                         }
-
-                        SwingUtilities.invokeLater(() -> {
-                            setGlassPane(glassPane);
-                            for (Component component : getComponents()) {
-                                component.setEnabled(false);
-                            }
-                            setEnabled(true);
-                            statusLabel.setText("Finished!");
-                        });
                     });
 
                     worker.start();
@@ -181,7 +197,7 @@ public class ExportDialog extends JDialog {
     private void createNodes(DefaultMutableTreeNode top, List<ExportBean> exportBeans) {
         for (ExportBean exportBean : exportBeans) {
             DefaultMutableTreeNode secondLevel = new DefaultMutableTreeNode(exportBean);
-            for (BeanNode node : exportBean.getBeans().getAllNodes()) {
+            for (BeanNode node : exportBean.getBeans()) {
                 DefaultMutableTreeNode thirdLevel = new DefaultMutableTreeNode(node);
                 DefaultMutableTreeNode fourthLevelProperties = new DefaultMutableTreeNode(PROPERTY_NODE_LABEL);
                 thirdLevel.add(fourthLevelProperties);

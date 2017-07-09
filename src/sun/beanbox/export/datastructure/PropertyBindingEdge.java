@@ -1,6 +1,7 @@
 package sun.beanbox.export.datastructure;
 
 import sun.beanbox.WrapperPropertyEventInfo;
+import sun.beanbox.export.util.StringUtil;
 import sunw.beanbox.PropertyHookup;
 
 import java.lang.reflect.Method;
@@ -31,14 +32,7 @@ public class PropertyBindingEdge extends BeanEdge {
     }
 
     public String getEventSetName() {
-        return uppercaseFirst(wrapperPropertyEventInfo.getEventSetName());
+        return StringUtil.uppercaseFirst(wrapperPropertyEventInfo.getEventSetName());
     }
 
-    private String uppercaseFirst(String in) {
-        char c[] = in.toCharArray();
-        if(Character.isLetter(c[0])) {
-            c[0] = Character.toUpperCase(c[0]);
-        }
-        return new String(c);
-    }
 }

@@ -53,14 +53,6 @@ public class ExportMethod {
         this.include = include;
     }
 
-    public String uppercaseFirst() {
-        char c[] = getName().toCharArray();
-        if(Character.isLetter(c[0])) {
-            c[0] = Character.toUpperCase(c[0]);
-        }
-        return new String(c);
-    }
-
     public Class getDeclaringClass() {
         return declaringClass;
     }

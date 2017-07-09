@@ -5,6 +5,7 @@ import sun.beanbox.export.datastructure.ExportBean;
 import sun.beanbox.export.datastructure.ExportEvent;
 import sun.beanbox.export.datastructure.ExportMethod;
 import sun.beanbox.export.datastructure.ExportProperty;
+import sun.beanbox.export.util.StringUtil;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -45,16 +46,21 @@ public class ExportEventEditor extends JPanel {
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("The name of the event. It must be unique among all events in this ExportBean and be a valid Java identifier.");
         TextField nameText = new TextField(exportEvent.getName());
-        JLabel nameCheckLabel = new JLabel(exporter.checkIfValidPropertyName(exportBean, nameText.getText()) ? "Valid name" : "Invalid name");
+        java.util.List<ExportConstraintViolation> violationList = exporter.checkIfValidEventName(exportBean, exportEvent, nameText.getText());
+        JLabel nameCheckLabel = new JLabel(violationList == null ? "Valid name" : "Invalid name");
+        nameCheckLabel.setToolTipText(violationList == null ? "No constraint violations found." : StringUtil.concatenateViolations(violationList));
         final ExportBean finalExportBean = exportBean;
         nameText.addTextListener(e -> {
-            if (exporter.checkIfValidPropertyName(finalExportBean, nameText.getText())) {
+            java.util.List<ExportConstraintViolation> violations = exporter.checkIfValidEventName(finalExportBean, exportEvent, nameText.getText());
+            if (violations == null) {
                 exportEvent.setName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
+                nameCheckLabel.setToolTipText("No constraint violations found.");
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
                 model.nodeChanged(treeNode);
             } else {
                 nameCheckLabel.setText("Invalid name");
+                nameCheckLabel.setToolTipText(StringUtil.concatenateViolations(violations));
             }
         });
         nameText.setColumns(22);

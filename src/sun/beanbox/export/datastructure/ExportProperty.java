@@ -5,8 +5,11 @@ import java.lang.reflect.InvocationTargetException;
 
 /**
  * Created by Andi on 26.05.2017.
+ *
+ * TODO if time: if we want to also use this as a tool to generate beaninfo classes for existing beans this class could
+ * TODO if time: use properties like display name, short description etc to be set by the user to give full configurability
  */
-public class ExportProperty { //TODO: add display name property
+public class ExportProperty {
 
     private PropertyDescriptor propertyDescriptor;
     private boolean export = true;
@@ -58,14 +61,6 @@ public class ExportProperty { //TODO: add display name property
     @Override
     public String toString() {
         return propertyDescriptor.getDisplayName() + " (" + getName() + ")";
-    }
-
-    public String uppercaseFirst() {
-        char c[] = getName().toCharArray();
-        if(Character.isLetter(c[0])) {
-            c[0] = Character.toUpperCase(c[0]);
-        }
-        return new String(c);
     }
 
     public boolean isSetDefaultValue() {
