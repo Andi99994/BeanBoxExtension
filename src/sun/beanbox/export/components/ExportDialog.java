@@ -2,7 +2,6 @@ package sun.beanbox.export.components;
 
 import sun.beanbox.ErrorDialog;
 import sun.beanbox.export.Exporter;
-import sun.beanbox.export.components.*;
 import sun.beanbox.export.datastructure.*;
 
 import javax.swing.*;
@@ -17,12 +16,12 @@ import java.util.List;
 
 /**
  * Created by Andreas Ertlschweiger on 06.05.2017.
- *
+ * <p>
  * This is the configurator window for Bean exporting.
  */
 public class ExportDialog extends JDialog {
 
-    private Exporter exporter;
+    private final Exporter exporter;
 
     private JTree tree;
 
@@ -33,7 +32,7 @@ public class ExportDialog extends JDialog {
     /**
      * This constructor sets up all UI components required for the export configuration.
      *
-     * @param owner the Window from which the Dialog is called.
+     * @param owner    the Window from which the Dialog is called.
      * @param exporter an instance of an Exporter component.
      */
     public ExportDialog(Frame owner, Exporter exporter) {
@@ -82,7 +81,7 @@ public class ExportDialog extends JDialog {
                         //Start the exporting process.
                         try {
                             List<ExportConstraintViolation> violations = exporter.export(fd.getDirectory(), fd.getFile());
-                            if(violations != null) {
+                            if (violations != null) {
                                 SwingUtilities.invokeLater(() -> {
                                     setGlassPane(glassPane);
                                     for (Component component : getComponents()) {
@@ -191,7 +190,7 @@ public class ExportDialog extends JDialog {
     /**
      * Assembles the TreeView that contains all the Beans, Properties, Events and Methods.
      *
-     * @param top the root node of the tree.
+     * @param top         the root node of the tree.
      * @param exportBeans a list of export beans that should be displayed.
      */
     private void createNodes(DefaultMutableTreeNode top, List<ExportBean> exportBeans) {

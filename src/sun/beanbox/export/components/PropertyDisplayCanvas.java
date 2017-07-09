@@ -10,22 +10,22 @@ import java.lang.reflect.InvocationTargetException;
 
 /**
  * Created by Andreas on 20.06.2017.
- *
+ * <p>
  * This is a Canvas to print the values of properties. It uses the paintValue or
  * getAsText method of the PropertyDescriptor.
  */
-public class PropertyDisplayCanvas extends Canvas {
+class PropertyDisplayCanvas extends Canvas {
 
     private PropertyEditor editor;
 
     /**
      * Constructs all UI elements required to display a property.
      *
-     * @param width defines the width of the property display box
-     * @param height defines the height of the property display box
+     * @param width    defines the width of the property display box
+     * @param height   defines the height of the property display box
      * @param property the ExportProperty to be displayed
      * @throws InvocationTargetException if there is an error accessing the property
-     * @throws IllegalAccessException if there is an error accessing the property
+     * @throws IllegalAccessException    if there is an error accessing the property
      */
     public PropertyDisplayCanvas(int width, int height, ExportProperty property) throws InvocationTargetException, IllegalAccessException {
         setMaximumSize(new Dimension(width, height));
@@ -33,7 +33,7 @@ public class PropertyDisplayCanvas extends Canvas {
         setPreferredSize(new Dimension(width, height));
         setMinimumSize(new Dimension(width, height));
 
-        //code taken and adapted from PropertySheet. Unfortunately there was no reusability.
+        //code taken and adapted from PropertySheet. Unfortunately there was no re-usability.
         PropertyDescriptor propertyDescriptor = property.getPropertyDescriptor();
         Object value = property.getCurrentValue();
         Class pec = propertyDescriptor.getPropertyEditorClass();
@@ -80,7 +80,7 @@ public class PropertyDisplayCanvas extends Canvas {
             Rectangle box = new Rectangle(0, 0, getSize().width, getSize().height);
             editor.paintValue(g, box);
             return;
-        } else if (editor != null && editor.getAsText() != null){
+        } else if (editor != null && editor.getAsText() != null) {
             String value = editor.getAsText();
             FontMetrics metrics = g.getFontMetrics(g.getFont());
             int x = (getSize().width - metrics.stringWidth(value)) / 2;
@@ -88,6 +88,6 @@ public class PropertyDisplayCanvas extends Canvas {
             g.drawString(value, x, y);
             return;
         }
-        g.drawString("Unable to print value!", 0,22);
+        g.drawString("Unable to print value!", 0, 22);
     }
 }

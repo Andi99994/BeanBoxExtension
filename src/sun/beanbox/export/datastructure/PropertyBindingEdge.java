@@ -2,16 +2,17 @@ package sun.beanbox.export.datastructure;
 
 import sun.beanbox.WrapperPropertyEventInfo;
 import sun.beanbox.export.util.StringUtil;
-import sunw.beanbox.PropertyHookup;
 
 import java.lang.reflect.Method;
 
 /**
- * Created by Andi on 22.06.2017.
+ * Created by Andreas on 22.06.2017.
+ * <p>
+ * This class describes an edge between two BeanNodes that is given by a property binding.
  */
 public class PropertyBindingEdge extends BeanEdge {
 
-    private WrapperPropertyEventInfo wrapperPropertyEventInfo;
+    private final WrapperPropertyEventInfo wrapperPropertyEventInfo;
     private String adapterName;
 
     public PropertyBindingEdge(BeanNode start, BeanNode end, WrapperPropertyEventInfo wrapperPropertyEventInfo) {

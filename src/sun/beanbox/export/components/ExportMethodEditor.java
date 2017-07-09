@@ -3,34 +3,27 @@ package sun.beanbox.export.components;
 import sun.beanbox.export.Exporter;
 import sun.beanbox.export.datastructure.ExportBean;
 import sun.beanbox.export.datastructure.ExportMethod;
-import sun.beanbox.export.datastructure.ExportProperty;
 import sun.beanbox.export.util.StringUtil;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
-import javax.xml.soap.Text;
 import java.awt.*;
-import java.beans.PropertyDescriptor;
-import java.beans.PropertyEditor;
-import java.beans.PropertyVetoException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * Created by Andreas on 22.06.2017.
- *
+ * <p>
  * This class represents the view to customise the ExportMethods during exporting.
  */
-public class ExportMethodEditor extends JPanel {
+class ExportMethodEditor extends JPanel {
 
     /**
      * This constructs all UI elements required to customise an ExportMethod.
      *
-     * @param exporter the exporter component
+     * @param exporter     the exporter component
      * @param exportMethod the ExportMethod to be customised
-     * @param tree the TreeView to update name changes
-     * @param treeNode the node to be updated on name changes
+     * @param tree         the TreeView to update name changes
+     * @param treeNode     the node to be updated on name changes
      */
     public ExportMethodEditor(Exporter exporter, ExportMethod exportMethod, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
@@ -66,8 +59,8 @@ public class ExportMethodEditor extends JPanel {
         JCheckBox include = new JCheckBox("Include in input interface");
         include.setEnabled(exportMethod.getNode().isInputInterface());
         include.setAlignmentX(Component.CENTER_ALIGNMENT);
-        include.setSelected(exportMethod.isInclude());
-        include.addActionListener(e -> exportMethod.setInclude(include.isSelected()));
+        include.setSelected(exportMethod.isExport());
+        include.addActionListener(e -> exportMethod.setExport(include.isSelected()));
         include.setToolTipText("Select whether the method should be included after export. A method can only be included if it's bean is part of the input interface.");
 
         GridBagConstraints c = new GridBagConstraints();

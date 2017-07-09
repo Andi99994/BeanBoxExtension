@@ -3,50 +3,21 @@ package sun.beanbox.export.datastructure;
 import java.beans.EventSetDescriptor;
 
 /**
- * Created by Andi on 03.07.2017.
+ * Created by Andreas on 03.07.2017.
+ * <p>
+ * This class describes an event of a BeanNode that can be exported.
  */
-public class ExportEvent {
+public class ExportEvent extends ExportFeature {
 
-    private EventSetDescriptor eventSetDescriptor;
-    private BeanNode beanNode;
-    private String name;
-    private boolean include = true;
+    private final EventSetDescriptor eventSetDescriptor;
 
     public ExportEvent(EventSetDescriptor eventSetDescriptor, BeanNode beanNode) {
+        super(beanNode);
         this.eventSetDescriptor = eventSetDescriptor;
-        this.beanNode = beanNode;
-    }
-
-    public String getName() {
-        if(name == null || name.isEmpty()) {
-            return eventSetDescriptor.getName();
-        } else {
-            return name;
-        }
-    }
-
-    public BeanNode getBeanNode() {
-        return beanNode;
+        setName(eventSetDescriptor.getName());
     }
 
     public EventSetDescriptor getEventSetDescriptor() {
         return eventSetDescriptor;
-    }
-
-    @Override
-    public String toString() {
-        return getName();
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public boolean isInclude() {
-        return include;
-    }
-
-    public void setInclude(boolean include) {
-        this.include = include;
     }
 }

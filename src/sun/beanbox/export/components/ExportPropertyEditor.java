@@ -8,28 +8,23 @@ import sun.beanbox.export.util.StringUtil;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
-import javax.xml.soap.Text;
 import java.awt.*;
-import java.beans.PropertyDescriptor;
-import java.beans.PropertyEditor;
-import java.beans.PropertyVetoException;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * Created by Andreas on 22.06.2017.
- *
+ * <p>
  * This class represents the view to customise the ExportProperties during exporting.
  */
-public class ExportPropertyEditor extends JPanel {
+class ExportPropertyEditor extends JPanel {
 
     /**
      * This constructs all UI elements required to customise an ExportProperty.
      *
-     * @param exporter the exporter component
+     * @param exporter       the exporter component
      * @param exportProperty the ExportProperty to be customised
-     * @param tree the TreeView to update name changes
-     * @param treeNode the node to be updated on name changes
+     * @param tree           the TreeView to update name changes
+     * @param treeNode       the node to be updated on name changes
      */
     public ExportPropertyEditor(Exporter exporter, ExportProperty exportProperty, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());

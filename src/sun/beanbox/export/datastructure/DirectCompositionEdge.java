@@ -5,25 +5,17 @@ import sun.beanbox.WrapperEventTarget;
 import java.beans.EventSetDescriptor;
 
 /**
- * Created by Andi on 22.06.2017.
+ * Created by Andreas on 22.06.2017.
+ * <p>
+ * This class describes an edge between two BeanNodes that is given by a direct composition.
  */
-public class DirectCompositionEdge extends BeanEdge{
+public class DirectCompositionEdge extends BeanEdge {
 
-    private String eventSetName;
-    private EventSetDescriptor eventSetDescriptor;
+    private final EventSetDescriptor eventSetDescriptor;
 
     public DirectCompositionEdge(BeanNode start, BeanNode end, WrapperEventTarget eventTarget) {
         super(start, end);
-        this.eventSetName = eventTarget.getEventSetName();
         this.eventSetDescriptor = eventTarget.getEventSetDescriptor();
-    }
-
-    public String getEventSetName() {
-        char c[] = eventSetName.toCharArray();
-        if(Character.isLetter(c[0])) {
-            c[0] = Character.toUpperCase(c[0]);
-        }
-        return new String(c);
     }
 
     public EventSetDescriptor getEventSetDescriptor() {

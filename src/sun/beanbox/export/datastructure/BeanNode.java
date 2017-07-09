@@ -1,17 +1,19 @@
 package sun.beanbox.export.datastructure;
 
-import java.beans.IntrospectionException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * Created by Andreas on 26.05.2017.
+ * <p>
+ * This class describes a node in the Bean graph. It contains information about the bean and various parameters regarding
+ * the export process.
  */
 public class BeanNode {
 
     private String name;
-    private Object data;
+    private final Object data;
     private List<BeanEdge> edges = new LinkedList<>();
     private List<ExportProperty> properties = new LinkedList<>();
     private List<ExportMethod> methods = new LinkedList<>();
@@ -21,7 +23,7 @@ public class BeanNode {
     private boolean outputInterface = false;
     private String jarPath;
 
-    public BeanNode(Object data, String displayName) throws IntrospectionException {
+    public BeanNode(Object data, String displayName) {
         this.name = displayName;
         this.data = data;
     }
@@ -127,7 +129,7 @@ public class BeanNode {
 
     public boolean isAllEventsInOutputInterface() {
         for (ExportEvent event : events) {
-            if (!event.isInclude()) {
+            if (!event.isExport()) {
                 return false;
             }
         }
@@ -136,13 +138,13 @@ public class BeanNode {
 
     public void setAllEventsInOutputInterface(boolean included) {
         for (ExportEvent event : events) {
-            event.setInclude(included);
+            event.setExport(included);
         }
     }
 
     public boolean isAllMethodsInInputInterface() {
         for (ExportMethod method : methods) {
-            if (!method.isInclude()) {
+            if (!method.isExport()) {
                 return false;
             }
         }
@@ -151,7 +153,7 @@ public class BeanNode {
 
     public void setAllMethodsInInputInterface(boolean included) {
         for (ExportMethod method : methods) {
-            method.setInclude(included);
+            method.setExport(included);
         }
     }
 }

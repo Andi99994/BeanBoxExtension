@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Created by Andreas on 05.06.2017.
- *
+ * <p>
  * This class is a simple selection list to select input or output nodes if we cant infer them from the structure.
  */
 public class NodeSelector extends JDialog {
@@ -19,19 +19,17 @@ public class NodeSelector extends JDialog {
     /**
      * Constructs all UI elements required to display a selection list.
      *
-     * @param owner the frame that calls this component
+     * @param owner          the frame that calls this component
      * @param availableNodes all BeanNodes that are eligible to be an input or output node
-     * @param message the text to be displayed on the top
+     * @param message        the text to be displayed on the top
      */
     public NodeSelector(Frame owner, List<BeanNode> availableNodes, String message) {
         super(owner, "Select Beans", true);
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent windowEvent) {
-                if (showExitDialog() == JOptionPane.YES_OPTION) {
-                    availableNodes.clear();
-                    dispose();
-                }
+                availableNodes.clear();
+                dispose();
             }
         });
         setLayout(new BorderLayout());
@@ -58,25 +56,13 @@ public class NodeSelector extends JDialog {
         });
         Button cancelButton = new Button("Cancel");
         cancelButton.addActionListener(e -> {
-            int result = showExitDialog();
-            if (result == JOptionPane.YES_OPTION) {
-                availableNodes.clear();
-                dispose();
-            }
+            availableNodes.clear();
+            dispose();
         });
         buttonPanel.add(exportButton);
         buttonPanel.add(cancelButton);
         this.add(buttonPanel, BorderLayout.PAGE_END);
         this.setSize(new Dimension(800, 600));
-    }
-
-    /**
-     * Show a confirmation dialog to avoid accidental cancelling of the export.
-     *
-     * @return returns a value depending on the users selection
-     */
-    private int showExitDialog() {
-        return JOptionPane.showConfirmDialog(null, "You must select your input and output Beans. Do you want to cancel the export?", "Cancel", JOptionPane.YES_NO_OPTION);
     }
 
     /**

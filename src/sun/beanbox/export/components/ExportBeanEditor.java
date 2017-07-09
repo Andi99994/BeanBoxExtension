@@ -11,18 +11,18 @@ import java.awt.*;
 
 /**
  * Created by Andreas on 22.06.2017.
- *
+ * <p>
  * This class represents the view to customise the ExportBeans during exporting.
  */
-public class ExportBeanEditor extends JPanel {
+class ExportBeanEditor extends JPanel {
 
     /**
      * This constructs all UI elements required to customise an ExportBean.
      *
-     * @param exporter the exporter component
+     * @param exporter   the exporter component
      * @param exportBean the ExportBean to be customised
-     * @param tree the TreeView to update name changes
-     * @param treeNode the node to be updated on name changes
+     * @param tree       the TreeView to update name changes
+     * @param treeNode   the node to be updated on name changes
      */
     public ExportBeanEditor(Exporter exporter, ExportBean exportBean, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
@@ -30,14 +30,14 @@ public class ExportBeanEditor extends JPanel {
         JLabel name = new JLabel("Name: ");
         name.setToolTipText("Configure the name of the bean. The name must be a valid Java identifier and must not be a keyword. " +
                 "Pay attention that it does not conflict with any beans or resources that you are including.");
-        TextField nameText = new TextField(exportBean.getBeanName());
+        TextField nameText = new TextField(exportBean.getName());
         java.util.List<ExportConstraintViolation> violationList = exporter.checkIfValidClassName(exportBean, nameText.getText());
         JLabel nameCheckLabel = new JLabel(violationList == null ? "Valid name" : "Invalid name");
         nameCheckLabel.setToolTipText(violationList == null ? "No constraint violations found." : StringUtil.concatenateViolations(violationList));
         nameText.addTextListener(e -> {
             java.util.List<ExportConstraintViolation> violations = exporter.checkIfValidClassName(exportBean, nameText.getText());
             if (violations == null) {
-                exportBean.setBeanName(nameText.getText());
+                exportBean.setName(nameText.getText());
                 nameCheckLabel.setText("Valid name");
                 nameCheckLabel.setToolTipText("No constraint violations found.");
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();

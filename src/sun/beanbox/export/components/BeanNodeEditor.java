@@ -12,17 +12,17 @@ import java.util.List;
 
 /**
  * Created by Andreas on 22.06.2017.
- *
+ * <p>
  * This class represents the view to customise the BeanNodes during exporting.
  */
-public class BeanNodeEditor extends JPanel {
+class BeanNodeEditor extends JPanel {
 
     /**
      * This constructs all UI elements required to customise a BeanNode.
      *
      * @param exporter the exporter component
      * @param beanNode the BeanNode to be customised
-     * @param tree the TreeView to update name changes
+     * @param tree     the TreeView to update name changes
      * @param treeNode the node to be updated on name changes
      */
     public BeanNodeEditor(Exporter exporter, BeanNode beanNode, JTree tree, DefaultMutableTreeNode treeNode) {
@@ -80,8 +80,8 @@ public class BeanNodeEditor extends JPanel {
         output.setToolTipText("Select whether the bean should be part of the output interface.");
 
         GridBagConstraints c = new GridBagConstraints();
-        Insets topPadding = new Insets(15,0,0,0);
-        Insets noPadding = new Insets(0,0,0,0);
+        Insets topPadding = new Insets(15, 0, 0, 0);
+        Insets noPadding = new Insets(0, 0, 0, 0);
         c.weightx = 20;
         add(name, c);
         c.gridx = 1;
@@ -100,10 +100,10 @@ public class BeanNodeEditor extends JPanel {
         add(output, c);
         //print all direct compositions
         List<DirectCompositionEdge> directCompositions = beanNode.getDirectCompositionEdges();
-        if(directCompositions != null && directCompositions.size() > 0) {
+        if (directCompositions != null && directCompositions.size() > 0) {
             ++c.gridy;
             add(directCompositionsLabel, c);
-            for(DirectCompositionEdge edge : directCompositions) {
+            for (DirectCompositionEdge edge : directCompositions) {
                 JLabel labelStart = new JLabel(edge.getStart().toString());
                 labelStart.setFont(plainFont);
                 ++c.gridy;
@@ -123,11 +123,11 @@ public class BeanNodeEditor extends JPanel {
 
         //print all compositions that use an adapter
         List<AdapterCompositionEdge> hookupCompositionEdges = beanNode.getAdapterCompositionEdges();
-        if(hookupCompositionEdges != null && hookupCompositionEdges.size() > 0) {
+        if (hookupCompositionEdges != null && hookupCompositionEdges.size() > 0) {
             ++c.gridy;
             add(hookupCompositions, c);
             c.insets = noPadding;
-            for(AdapterCompositionEdge edge : hookupCompositionEdges) {
+            for (AdapterCompositionEdge edge : hookupCompositionEdges) {
                 JLabel labelStart = new JLabel(edge.getStart().toString());
                 labelStart.setFont(plainFont);
                 ++c.gridy;
@@ -148,11 +148,11 @@ public class BeanNodeEditor extends JPanel {
 
         //print all property bindings
         List<PropertyBindingEdge> propertyBindingEdges = beanNode.getPropertyBindingEdges();
-        if(propertyBindingEdges != null && propertyBindingEdges.size() > 0) {
+        if (propertyBindingEdges != null && propertyBindingEdges.size() > 0) {
             ++c.gridy;
             add(propertyBindings, c);
             c.insets = noPadding;
-            for(PropertyBindingEdge edge : propertyBindingEdges) {
+            for (PropertyBindingEdge edge : propertyBindingEdges) {
                 JLabel labelStart = new JLabel(edge.getStart().toString());
                 labelStart.setFont(plainFont);
                 ++c.gridy;

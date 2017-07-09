@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 
 /**
  * Created by Andreas on 07.07.2017.
- *
+ * <p>
  * This class offers some required functionality regarding Strings that could also be used anywhere else.
  */
 public class StringUtil {
@@ -17,7 +17,7 @@ public class StringUtil {
     /**
      * This method generates a String consisting of a prefix and a random number.
      *
-     * @param prefix the prefix
+     * @param prefix     the prefix
      * @param lowerBound the lower bound of the suffix number
      * @param upperBound the upper bound of the suffix number
      * @return returns a string
@@ -32,8 +32,8 @@ public class StringUtil {
      * This method turns an absolute path into a relative path. The absolute path is taken and reduced by the string.
      * It also replaces any backslashes with easier to use forward slashes.
      *
-     * @param base the base string to crop from the path
-     * @param file the file to get the relative path from
+     * @param base         the base string to crop from the path
+     * @param file         the file to get the relative path from
      * @param leadingSlash if there should be a leading slash on the relative path
      * @return returns a string of a relative path
      */
@@ -43,7 +43,7 @@ public class StringUtil {
         if (relativePath != null && relativePath.length() > 2 && !leadingSlash) {
             relativePath = relativePath.substring(1, relativePath.length());
         }
-        if(relativePath != null && relativePath.contains("\\")) {
+        if (relativePath != null && relativePath.contains("\\")) {
             return relativePath.replace('\\', '/');
         }
         return relativePath;
@@ -87,7 +87,7 @@ public class StringUtil {
 
     public static String uppercaseFirst(String text) {
         char c[] = text.toCharArray();
-        if(Character.isLetter(c[0])) {
+        if (Character.isLetter(c[0])) {
             c[0] = Character.toUpperCase(c[0]);
         }
         return new String(c);

@@ -38,7 +38,7 @@ import static java.nio.file.FileVisitResult.TERMINATE;
  * Created by Andreas on 06.05.2017.
  * <p>
  * This is the main component responsible for the export process. It first converts all selected Wrapper objects into
- * a better suited datastructure, a directed graph, that contains all relevant information. Any changes made to the
+ * a better suited data structure, a directed graph, that contains all relevant information. Any changes made to the
  * configuration will affect how the bean will be generated.
  */
 public class Exporter {
@@ -46,6 +46,8 @@ public class Exporter {
     //Map between Bean and Wrapper. This is for easier and faster access and comparison
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
+    private List<File> resources = new ArrayList<>();
+    private Set<String> resourceNames = new HashSet<>();
     private boolean keepSources = false;
 
     private String tmpDirectoryName = "/tmp";
@@ -68,16 +70,88 @@ public class Exporter {
 
     /**
      * Upon instantiation of the Exporter the selected Wrappers are grouped, processed and converted into a more suitable
-     * data structure.
+     * data structure. Afterwards the resource dictionary is built by reading information about all required sources.
      *
      * @param beans the beans that were selected for export
      * @throws IntrospectionException   if there is an error reading bean information
      * @throws IllegalArgumentException if there is an error accessing bean properties
      */
-    public Exporter(List<Wrapper> beans) throws IntrospectionException, IllegalArgumentException, NoSuchMethodException {
+    public Exporter(List<Wrapper> beans) throws IOException, IntrospectionException, IllegalArgumentException {
         for (List<Wrapper> group : groupWrappers(beans)) {
             exportBeans.add(assembleExportBean(group, DEFAULT_BEAN_NAME + exportBeans.size()));
         }
+        resources = collectResources();
+        for (File file : resources) {
+            resourceNames.addAll(getAllRelativeFileNames(file));
+        }
+    }
+
+    /**
+     * This method analyzes all ExportBeans and collects any necessary dependencies. These are the JAR files of the BeanNodes
+     * and any adapters if there are adapter compositions.
+     *
+     * @return returns a List of all necessary resources as files
+     * @throws IOException if a file can not be found or there is an error reading the files
+     */
+    private ArrayList<File> collectResources() throws IOException {
+        ArrayList<File> res = new ArrayList<>();
+        for (ExportBean exportBean : exportBeans) {
+            for (BeanNode node : exportBean.getBeans()) {
+                File resource = new File(node.getJarPath());
+                if (resource.isFile()) {
+                    if (!contentEquals(resource, res)) {
+                        res.add(resource);
+                    }
+                } else {
+                    throw new IOException("Source file not found or invalid: " + node.getJarPath());
+                }
+                for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
+                    File edgeResource = new File(edge.getAdapterClassPath());
+                    if (edgeResource.isFile()) {
+                        if (!contentEquals(edgeResource, res)) {
+                            res.add(edgeResource);
+                        }
+                    } else {
+                        throw new IOException("Source file not found or invalid: " + edge.getAdapterClassPath());
+                    }
+                }
+            }
+        }
+        return res;
+    }
+
+    /**
+     * This method analyzes a resource (that is a JAR file or an adapter) and returns a relative path for every file.
+     * For JAR files this means analyzing all entries and returning the package name. This method is used to generate
+     * a dictionary of resource names. We use this to detect conflicting resources during initialization and configuration
+     * in order to prevent the user from wasting time if the export is not possible anyways.
+     *
+     * @param file the file to get relative paths from
+     * @return returns one or more relative paths of the input files
+     * @throws IOException if there is an error reading the files
+     */
+    private List<String> getAllRelativeFileNames(File file) throws IOException {
+        List<String> packageNames = new ArrayList<>();
+        if (file.getName().toLowerCase().endsWith(".jar")) {
+            JarFile jarfile = new JarFile(file);
+            Enumeration<JarEntry> enu = jarfile.entries();
+            while (enu.hasMoreElements()) {
+                JarEntry je = enu.nextElement();
+                if (!je.isDirectory()) {
+                    if (packageNames.contains(je.getName())) {
+                        throw new IOException("Detected conflicting resource: " + je.getName());
+                    }
+                    packageNames.add(je.getName());
+                }
+            }
+        } else {
+            String relativePath = HookupManager.getTmpDir() + File.separator + file.getName();
+            if (packageNames.contains(relativePath)) {
+                throw new IOException("Detected conflicting resource: " + relativePath);
+            }
+            packageNames.add(relativePath);
+        }
+        return packageNames;
     }
 
     public boolean isKeepSources() {
@@ -163,15 +237,14 @@ public class Exporter {
      * @throws IntrospectionException   if there is an error reading bean information
      * @throws IllegalArgumentException if there is an error reading properties
      */
-    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException, NoSuchMethodException {
+    private ExportBean assembleExportBean(List<Wrapper> wrappers, String name) throws IntrospectionException, IllegalArgumentException {
         HashMap<Wrapper, BeanNode> createdNodes = new HashMap<>();
         for (Wrapper wrapper : wrappers) {
             createBeanNode(wrapper, createdNodes);
         }
         List<BeanNode> inputBeans = inferInputBeans(createdNodes);
         List<BeanNode> outputBeans = inferOutputBeans(createdNodes);
-        BeanGraph beanGraph = new BeanGraph(inputBeans, outputBeans, createdNodes.values());
-        return new ExportBean(beanGraph, name);
+        return new ExportBean(inputBeans, outputBeans, createdNodes.values(), name);
     }
 
     /**
@@ -183,7 +256,7 @@ public class Exporter {
      * @return returns a BeanNode
      * @throws IntrospectionException if there is an error reading bean information
      */
-    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException, NoSuchMethodException {
+    private BeanNode createBeanNode(Wrapper wrapper, HashMap<Wrapper, BeanNode> createdNodes) throws IntrospectionException {
         //avoid following cyclic references
         if (createdNodes.get(wrapper) != null) {
             return createdNodes.get(wrapper);
@@ -367,7 +440,6 @@ public class Exporter {
             File tmpAdapterDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_ADAPTER_DIRECTORY_NAME);
 
             if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
-                ArrayList<File> resources = collectResources();
                 copyAndExtractResources(tmpDirectory, resources);
                 resources.addAll(generatePropertyAdapters(tmpDirectory));
                 for (ExportBean exportBean : exportBeans) {
@@ -386,41 +458,6 @@ public class Exporter {
             return violations;
         }
         return null;
-    }
-
-    /**
-     * This method analyzes all ExportBeans and collects any necessary dependencies. These are the JAR files of the BeanNodes
-     * and any adapters if there are adapter compositions. This method could be optimized by already detecting conflicts so
-     * we can interrupt earlier etc...
-     *
-     * @return returns a List of all necessary resources as files
-     * @throws IOException if a file can not be found or there is an error reading the files
-     */
-    private ArrayList<File> collectResources() throws IOException {
-        ArrayList<File> res = new ArrayList<>();
-        for (ExportBean exportBean : exportBeans) {
-            for (BeanNode node : exportBean.getBeans()) {
-                File resource = new File(node.getJarPath());
-                if (resource.isFile()) {
-                    if (!contentEquals(resource, res)) {
-                        res.add(resource);
-                    }
-                } else {
-                    throw new IOException("Source file not found or invalid: " + node.getJarPath());
-                }
-                for (AdapterCompositionEdge edge : node.getAdapterCompositionEdges()) {
-                    File edgeResource = new File(edge.getAdapterClassPath());
-                    if (edgeResource.isFile()) {
-                        if (!contentEquals(edgeResource, res)) {
-                            res.add(edgeResource);
-                        }
-                    } else {
-                        throw new IOException("Source file not found or invalid: " + edge.getAdapterClassPath());
-                    }
-                }
-            }
-        }
-        return res;
     }
 
     /**
@@ -444,6 +481,8 @@ public class Exporter {
     /**
      * This method copies all specified resources to the specified directory. JAR files will additionally be extracted
      * into the target directory while keeping the package structure. All other file types will be copied as is.
+     * <p>
+     * Depending on the size and number of source files this almost always takes the most time in the whole process.
      *
      * @param targetDirectory the directory to copy all resources to
      * @param resources       the files that are being copied and extracted
@@ -623,13 +662,12 @@ public class Exporter {
      * @throws IOException               if there is an error writing
      * @throws InvocationTargetException if there is an error accessing properties
      * @throws IllegalAccessException    if there is an error accessing properties
-     * @throws NoSuchMethodException     if there is an error accessing methods
      */
-    private void generateBean(File targetDirectory, File propertyDirectory, ExportBean exportBean, File tmpDirectory) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
-        if (new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + ".java").exists()
-                || new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.java").exists()
-                || new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + ".class").exists()
-                || new File(targetDirectory.getAbsolutePath(), exportBean.getBeanName() + "BeanInfo.class").exists()) {
+    private void generateBean(File targetDirectory, File propertyDirectory, ExportBean exportBean, File tmpDirectory) throws IOException, InvocationTargetException, IllegalAccessException {
+        if (new File(targetDirectory.getAbsolutePath(), exportBean.getName() + ".java").exists()
+                || new File(targetDirectory.getAbsolutePath(), exportBean.getName() + "BeanInfo.java").exists()
+                || new File(targetDirectory.getAbsolutePath(), exportBean.getName() + ".class").exists()
+                || new File(targetDirectory.getAbsolutePath(), exportBean.getName() + "BeanInfo.class").exists()) {
             throw new IOException("Error creating Files for: " + exportBean + ". Maybe you have conflicting resources?");
         }
         //collect some necessary information beforehand to increase performance
@@ -643,8 +681,8 @@ public class Exporter {
         int hookupCounter = 0;
 
         for (ExportMethod exportMethod : exportMethods) {
-            if (exportMethod.isImplementInterface()) {
-                interfaces.add(exportMethod.getDeclaringClass());
+            if (exportMethod.getDeclaringClass() != null) {
+                interfaces.add(exportMethod.getDeclaringClass()); //TODO: possible error source
             }
         }
 
@@ -782,20 +820,20 @@ public class Exporter {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(void.class)
                     .addParameter(esd.getListenerType(), "listener")
-                    .addCode("" + StringUtil.lowercaseFirst(event.getBeanNode().getName()) + "." + esd.getAddListenerMethod().getName() + "(listener);")
+                    .addCode("" + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getAddListenerMethod().getName() + "(listener);")
                     .build());
             methods.add(MethodSpec.methodBuilder("remove" + StringUtil.uppercaseFirst(event.getName()) + "EventListener")
                     .addModifiers(Modifier.PUBLIC)
                     .returns(void.class)
                     .addParameter(esd.getListenerType(), "listener")
-                    .addCode("" + StringUtil.lowercaseFirst(event.getBeanNode().getName()) + "." + esd.getRemoveListenerMethod().getName() + "(listener);")
+                    .addCode("" + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getRemoveListenerMethod().getName() + "(listener);")
                     .build());
 
             if (event.getEventSetDescriptor().getGetListenerMethod() != null) {
                 methods.add(MethodSpec.methodBuilder("get" + StringUtil.uppercaseFirst(event.getName()) + "EventListeners")
                         .addModifiers(Modifier.PUBLIC)
                         .returns(esd.getGetListenerMethod().getReturnType())
-                        .addCode("return " + StringUtil.lowercaseFirst(event.getBeanNode().getName()) + "." + esd.getGetListenerMethod().getName() + "();")
+                        .addCode("return " + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getGetListenerMethod().getName() + "();")
                         .build());
             }
         }
@@ -860,7 +898,7 @@ public class Exporter {
         }
 
         //build the class
-        TypeSpec.Builder bean = TypeSpec.classBuilder(exportBean.getBeanName())
+        TypeSpec.Builder bean = TypeSpec.classBuilder(exportBean.getName())
                 .addModifiers(Modifier.PUBLIC)
                 .addMethod(constructor.build())
                 .addSuperinterface(Serializable.class);
@@ -885,7 +923,7 @@ public class Exporter {
             propertyDescriptor.addCode("return new PropertyDescriptor[]{};");
         } else {
             propertyDescriptor.addCode("try {\n");
-            propertyDescriptor.addCode("\tClass<?> cls = " + exportBean.getBeanName() + ".class;\n");
+            propertyDescriptor.addCode("\tClass<?> cls = " + exportBean.getName() + ".class;\n");
             StringBuilder propertyDescriptorArray = new StringBuilder("{");
             for (ExportProperty exportProperty : exportProperties) {
                 String descriptorName = StringUtil.generateName("pd" + StringUtil.uppercaseFirst(exportProperty.getName()) + "_", 10000, 90000);
@@ -915,7 +953,7 @@ public class Exporter {
 
         if (!exportEvents.isEmpty()) {
             eventSetDescriptor.addCode("try {\n");
-            eventSetDescriptor.addCode("\tClass<?> cls = " + exportBean.getBeanName() + ".class;\n");
+            eventSetDescriptor.addCode("\tClass<?> cls = " + exportBean.getName() + ".class;\n");
             StringBuilder eventSetDescriptorArray = new StringBuilder("{");
             if (exportBean.isAddPropertyChangeSupport()) {
                 eventSetDescriptor.addCode("\tEventSetDescriptor esdPropertyChange = new EventSetDescriptor(cls, \"propertyChange\", java.beans.PropertyChangeListener.class, \"propertyChange\");\n");
@@ -958,7 +996,7 @@ public class Exporter {
 
         if (!exportEvents.isEmpty()) {
             methodDescriptor.addCode("try {\n");
-            methodDescriptor.addCode("\tClass<?> cls = " + exportBean.getBeanName() + ".class;\n");
+            methodDescriptor.addCode("\tClass<?> cls = " + exportBean.getName() + ".class;\n");
             StringBuilder methodDescriptorArray = new StringBuilder("{");
             for (ExportMethod exportMethod : exportMethods) {
                 StringBuilder classArray = new StringBuilder();
@@ -993,7 +1031,7 @@ public class Exporter {
                 .initializer("1L")
                 .build();
 
-        TypeSpec.Builder beanInfo = TypeSpec.classBuilder(exportBean.getBeanName() + "BeanInfo")
+        TypeSpec.Builder beanInfo = TypeSpec.classBuilder(exportBean.getName() + "BeanInfo")
                 .superclass(SimpleBeanInfo.class)
                 .addModifiers(Modifier.PUBLIC)
                 .addMethod(propertyDescriptor.build())
@@ -1048,7 +1086,7 @@ public class Exporter {
         writer.println("Manifest-Version: 1.0");
         writer.println();
         for (ExportBean exportBean : exportBeans) {
-            writer.println("Name: " + DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getBeanName() + ".class");
+            writer.println("Name: " + DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class");
             writer.println("Java-Bean: True");
             writer.println();
             for (BeanNode beanNode : exportBean.getBeans()) {
@@ -1082,13 +1120,8 @@ public class Exporter {
     /**
      * Checks if a String is a valid name for an ExportBean. It may not be empty, must not exceed 64 characters, be a valid Java identifier,
      * must not be a Java keyword and it must be unique among all ExportBeans in a single export. Additionally the String may not conflict
-     * with any resources required to build the JAR file -> We can only check this one level deep into the hierarchical composition
-     * since we currently do not save any information about the composition to ensure it is just like a normal JavaBean. An optional
-     * improvement would be to keep some kind of Tree structure over all resources in memory that is built during initialization of the
-     * export process. This way we could check for possible conflicts during configuration and inform the user about and not produce an
-     * error during generation. It would also require a performance to benefit evaluation to load the resources before the actual export is started.
+     * with any resources required to build the JAR file.
      *
-     * //TODO if time
      * @param text the text to be checked
      * @return returns if the name is valid
      */
@@ -1098,18 +1131,24 @@ public class Exporter {
             violations.add(new ExportConstraintViolation("ExportBean has no name."));
             return violations;
         }
-        if(text.length() > MAX_IDENTIFIER_LENGTH) {
+        if (text.length() > MAX_IDENTIFIER_LENGTH) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + "."));
         }
-        if(!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
+        if (!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name not a valid Java identifier."));
         }
-        if(RESERVED_CLASS_NAME_POOL.contains(text)) {
+        if (RESERVED_CLASS_NAME_POOL.contains(text)) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with reserved class name."));
         }
+        if (resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".java")
+                || resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class")
+                || resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.java")
+                || resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.class")) {
+            violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with resource."));
+        }
         for (ExportBean bean : exportBeans) {
-            if (bean.getBeanName().equals(text) && bean != exportBean) {
-                violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with ExportBean " + bean.getBeanName() + "."));
+            if (bean.getName().equals(text) && bean != exportBean) {
+                violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with ExportBean " + bean.getName() + "."));
             }
         }
         for (BeanNode node : exportBean.getBeans()) {
@@ -1126,7 +1165,6 @@ public class Exporter {
      * internally and has no effect to the user. It is an optional configuration to help the user identify beans in the source code
      * after export.
      *
-     * //TODO if time
      * @param text the text to be checked
      * @return returns if the name is valid
      */
@@ -1136,17 +1174,17 @@ public class Exporter {
             violations.add(new ExportConstraintViolation("BeanNode has no name."));
             return violations;
         }
-        if(text.length() > MAX_IDENTIFIER_LENGTH) {
+        if (text.length() > MAX_IDENTIFIER_LENGTH) {
             violations.add(new ExportConstraintViolation("BeanNode " + text + ": name exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + "."));
         }
-        if(!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
+        if (!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
             violations.add(new ExportConstraintViolation("BeanNode " + text + ": name not a valid Java identifier."));
         }
-        if(RESERVED_PROPERTY_NAME_POOL.contains(text)) {
+        if (RESERVED_PROPERTY_NAME_POOL.contains(text)) {
             violations.add(new ExportConstraintViolation("BeanNode " + text + ": name conflicts with reserved property name."));
         }
-        if(exportBean.getBeanName().toLowerCase().equals(text.toLowerCase())) {
-            violations.add(new ExportConstraintViolation("BeanNode " + text + ": name conflicts with ExportBean " + exportBean.getBeanName() + "."));
+        if (exportBean.getName().toLowerCase().equals(text.toLowerCase())) {
+            violations.add(new ExportConstraintViolation("BeanNode " + text + ": name conflicts with ExportBean " + exportBean.getName() + "."));
         }
         for (BeanNode node : exportBean.getBeans()) {
             if (node.getName().equals(text) && node != beanNode) {
@@ -1172,15 +1210,15 @@ public class Exporter {
                     exportProperty.getNode().getName() + "has no name."));
             return violations;
         }
-        if(text.length() > MAX_IDENTIFIER_LENGTH) {
+        if (text.length() > MAX_IDENTIFIER_LENGTH) {
             violations.add(new ExportConstraintViolation("Property " + text + " of Bean " +
                     exportProperty.getNode().getName() + ": name exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + "."));
         }
-        if(!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
+        if (!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
             violations.add(new ExportConstraintViolation("Property " + text + " of Bean " +
                     exportProperty.getNode().getName() + ": name not a valid Java identifier."));
         }
-        if(RESERVED_METHOD_NAME_POOL.contains(text.toLowerCase())
+        if (RESERVED_METHOD_NAME_POOL.contains(text.toLowerCase())
                 || RESERVED_METHOD_NAME_POOL.contains("get" + text.toLowerCase())
                 || RESERVED_METHOD_NAME_POOL.contains("set" + text.toLowerCase())) {
             violations.add(new ExportConstraintViolation("Property " + text + " of Bean " +
@@ -1205,7 +1243,7 @@ public class Exporter {
             if (StringUtil.uppercaseFirst(text).equals(StringUtil.uppercaseFirst(event.getName()) + "EventListeners")) {
                 violations.add(new ExportConstraintViolation("Property " + text + " of Bean " +
                         exportProperty.getNode().getName() + ": name conflicts with generated method get" +
-                        StringUtil.uppercaseFirst(event.getName()) + "EventListeners of Bean "+ event.getBeanNode().getName() + "."));
+                        StringUtil.uppercaseFirst(event.getName()) + "EventListeners of Bean " + event.getNode().getName() + "."));
             }
         }
         return violations.isEmpty() ? null : violations;
@@ -1224,25 +1262,25 @@ public class Exporter {
         List<ExportConstraintViolation> violations = new ArrayList<>();
         if (text == null || text.isEmpty()) {
             violations.add(new ExportConstraintViolation("Event of Bean " +
-                    exportEvent.getBeanNode().getName() + " has no name."));
+                    exportEvent.getNode().getName() + " has no name."));
             return violations;
         }
-        if(text.length() > MAX_IDENTIFIER_LENGTH) {
+        if (text.length() > MAX_IDENTIFIER_LENGTH) {
             violations.add(new ExportConstraintViolation("Event " + text + " of Bean " +
-                    exportEvent.getBeanNode().getName() + ": name exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + "."));
+                    exportEvent.getNode().getName() + ": name exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + "."));
         }
-        if(!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
+        if (!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
             violations.add(new ExportConstraintViolation("Event " + text + " of Bean " +
-                    exportEvent.getBeanNode().getName() + ": name not a valid Java identifier."));
+                    exportEvent.getNode().getName() + ": name not a valid Java identifier."));
         }
-        if(RESERVED_EVENT_NAME_POOL.contains(text.toLowerCase())) {
+        if (RESERVED_EVENT_NAME_POOL.contains(text.toLowerCase())) {
             violations.add(new ExportConstraintViolation("Event " + text + " of Bean " +
-                    exportEvent.getBeanNode().getName() + ": name conflicts with reserved event name."));
+                    exportEvent.getNode().getName() + ": name conflicts with reserved event name."));
         }
         for (ExportProperty property : exportBean.getProperties()) {
             if ((StringUtil.uppercaseFirst(text) + "EventListeners").equals(StringUtil.uppercaseFirst(property.getName()))) {
                 violations.add(new ExportConstraintViolation("Event " + text + " of Bean " +
-                        exportEvent.getBeanNode().getName() + ": generated method name conflicts with property " + property.getName() +
+                        exportEvent.getNode().getName() + ": generated method name conflicts with property " + property.getName() +
                         " of Bean " + property.getNode().getName() + "."));
             }
         }
@@ -1251,15 +1289,15 @@ public class Exporter {
                     || method.getName().equals("remove" + StringUtil.uppercaseFirst(text) + "EventListener")
                     || method.getName().equals("get" + StringUtil.uppercaseFirst(text) + "EventListeners")) {
                 violations.add(new ExportConstraintViolation("Event " + text + " of Bean " +
-                        exportEvent.getBeanNode().getName() + ": generated method name conflicts with method " + method.getName() +
+                        exportEvent.getNode().getName() + ": generated method name conflicts with method " + method.getName() +
                         " of Bean " + method.getNode().getName() + "."));
             }
         }
         for (ExportEvent event : exportBean.getEvents()) {
             if (event.getName().equals(text) && event != exportEvent) {
                 violations.add(new ExportConstraintViolation("Event " + text + " of Bean " +
-                        exportEvent.getBeanNode().getName() + ": name conflicts with event " + event.getName() +
-                        " of Bean " + event.getBeanNode().getName() + "."));
+                        exportEvent.getNode().getName() + ": name conflicts with event " + event.getName() +
+                        " of Bean " + event.getNode().getName() + "."));
             }
         }
         return violations.isEmpty() ? null : violations;
@@ -1277,18 +1315,18 @@ public class Exporter {
     public List<ExportConstraintViolation> checkIfValidMethodName(ExportBean exportBean, ExportMethod exportMethod, String text) {
         List<ExportConstraintViolation> violations = new ArrayList<>();
         if (text == null || text.isEmpty()) {
-            violations.add(new ExportConstraintViolation("Method of Bean " + exportMethod.getNode().getName() +  " has no name."));
+            violations.add(new ExportConstraintViolation("Method of Bean " + exportMethod.getNode().getName() + " has no name."));
             return violations;
         }
-        if(text.length() > MAX_IDENTIFIER_LENGTH) {
+        if (text.length() > MAX_IDENTIFIER_LENGTH) {
             violations.add(new ExportConstraintViolation("Method " + text + " of Bean " +
                     exportMethod.getNode().getName() + ": name exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + "."));
         }
-        if(!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
+        if (!SourceVersion.isIdentifier(text) || SourceVersion.isKeyword(text)) {
             violations.add(new ExportConstraintViolation("Method " + text + " of Bean " +
                     exportMethod.getNode().getName() + ": name not a valid Java identifier."));
         }
-        if(RESERVED_METHOD_NAME_POOL.contains(text.toLowerCase())) {
+        if (RESERVED_METHOD_NAME_POOL.contains(text.toLowerCase())) {
             violations.add(new ExportConstraintViolation("Method " + text + " of Bean " +
                     exportMethod.getNode().getName() + ": name conflicts with reserved method name."));
         }
@@ -1313,7 +1351,7 @@ public class Exporter {
                     || text.equals("get" + StringUtil.uppercaseFirst(event.getName()) + "EventListeners")) {
                 violations.add(new ExportConstraintViolation("Method " + text + " of Bean " +
                         exportMethod.getNode().getName() + ": name conflicts with generated event method " + event.getName() + " of Bean " +
-                        event.getBeanNode().getName() + "."));
+                        event.getNode().getName() + "."));
             }
         }
         return violations.isEmpty() ? null : violations;
@@ -1330,7 +1368,7 @@ public class Exporter {
     private List<ExportConstraintViolation> validateConfiguration() {
         List<ExportConstraintViolation> violations = new ArrayList<>();
         for (ExportBean bean : exportBeans) {
-            addAllIfNotNull(checkIfValidClassName(bean, bean.getBeanName()), violations);
+            addAllIfNotNull(checkIfValidClassName(bean, bean.getName()), violations);
             for (BeanNode node : bean.getBeans()) {
                 addAllIfNotNull(checkIfValidNodeName(bean, node, node.getName()), violations);
             }

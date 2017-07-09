@@ -3,35 +3,27 @@ package sun.beanbox.export.components;
 import sun.beanbox.export.Exporter;
 import sun.beanbox.export.datastructure.ExportBean;
 import sun.beanbox.export.datastructure.ExportEvent;
-import sun.beanbox.export.datastructure.ExportMethod;
-import sun.beanbox.export.datastructure.ExportProperty;
 import sun.beanbox.export.util.StringUtil;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
-import javax.xml.soap.Text;
 import java.awt.*;
-import java.beans.PropertyDescriptor;
-import java.beans.PropertyEditor;
-import java.beans.PropertyVetoException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * Created by Andreas on 22.06.2017.
- *
+ * <p>
  * This class represents the view to customise the ExportEvents during exporting.
  */
-public class ExportEventEditor extends JPanel {
+class ExportEventEditor extends JPanel {
 
     /**
      * This constructs all UI elements required to customise an ExportEvent.
      *
-     * @param exporter the exporter component
+     * @param exporter    the exporter component
      * @param exportEvent the ExportEvent to be customised
-     * @param tree the TreeView to update name changes
-     * @param treeNode the node to be updated on name changes
+     * @param tree        the TreeView to update name changes
+     * @param treeNode    the node to be updated on name changes
      */
     public ExportEventEditor(Exporter exporter, ExportEvent exportEvent, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
@@ -65,10 +57,10 @@ public class ExportEventEditor extends JPanel {
         });
         nameText.setColumns(22);
         JCheckBox include = new JCheckBox("Include in output interface");
-        include.setEnabled(exportEvent.getBeanNode().isOutputInterface());
+        include.setEnabled(exportEvent.getNode().isOutputInterface());
         include.setAlignmentX(Component.CENTER_ALIGNMENT);
-        include.setSelected(exportEvent.isInclude());
-        include.addActionListener(e -> exportEvent.setInclude(include.isSelected()));
+        include.setSelected(exportEvent.isExport());
+        include.addActionListener(e -> exportEvent.setExport(include.isSelected()));
         include.setToolTipText("Select whether the event should be included after export. An event can only be included if it's bean is part of the output interface.");
 
         GridBagConstraints c = new GridBagConstraints();

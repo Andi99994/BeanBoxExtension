@@ -3,7 +3,6 @@ package sun.beanbox.export.components;
 import sun.beanbox.export.datastructure.BeanNode;
 
 import javax.swing.*;
-import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 
 /**
@@ -11,7 +10,7 @@ import java.awt.*;
  * <p>
  * This class represents the view to customise all events at the same time during exporting.
  */
-public class AllEventsEditor extends JPanel {
+class AllEventsEditor extends JPanel {
 
     /**
      * This constructs all UI elements required to customise all events.

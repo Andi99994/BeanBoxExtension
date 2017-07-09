@@ -1,11 +1,13 @@
 package sun.beanbox.export.components;
 
 /**
- * Created by Andi on 04.07.2017.
+ * Created by Andreas on 04.07.2017.
+ * <p>
+ * A simple value object to hold a message that describes a constraint violation that occurred during export.
  */
 public class ExportConstraintViolation {
 
-    private String message;
+    private final String message;
 
     public ExportConstraintViolation(String message) {
         this.message = message;
@@ -13,9 +15,5 @@ public class ExportConstraintViolation {
 
     public String getMessage() {
         return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
     }
 }
