@@ -1,9 +1,10 @@
 package sun.beanbox.export.datastructure;
 
 import java.beans.MethodDescriptor;
+import java.util.Arrays;
 
 /**
- * Created by Andreas on 26.05.2017.
+ * Created by Andreas Ertlschweiger on 26.05.2017.
  * <p>
  * This class describes a method of a BeanNode that can be exported.
  */
@@ -25,5 +26,12 @@ public class ExportMethod extends ExportFeature {
 
     public Class getDeclaringClass() {
         return declaringClass;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder parameters = new StringBuilder();
+        Arrays.stream(methodDescriptor.getMethod().getParameterTypes()).forEach(parameter -> parameters.append(parameter.getSimpleName()).append(" "));
+        return getName() + " ( " + parameters.toString() + ")";
     }
 }

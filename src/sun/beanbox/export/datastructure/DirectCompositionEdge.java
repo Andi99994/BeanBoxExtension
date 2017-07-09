@@ -5,7 +5,7 @@ import sun.beanbox.WrapperEventTarget;
 import java.beans.EventSetDescriptor;
 
 /**
- * Created by Andreas on 22.06.2017.
+ * Created by Andreas Ertlschweiger on 22.06.2017.
  * <p>
  * This class describes an edge between two BeanNodes that is given by a direct composition.
  */

@@ -1,11 +1,12 @@
 package sun.beanbox.export.datastructure;
 
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Created by Andreas on 26.05.2017.
+ * Created by Andreas Ertlschweiger on 26.05.2017.
  * <p>
  * This class describes a node in the Bean graph. It contains information about the bean and various parameters regarding
  * the export process.
@@ -155,5 +156,14 @@ public class BeanNode {
         for (ExportMethod method : methods) {
             method.setExport(included);
         }
+    }
+
+    /**
+     * Sorts properties, methods and events alphabetically so it is easier for the user to find entries.
+     */
+    public void sortData() {
+        properties.sort(Comparator.comparing(ExportFeature::getName));
+        methods.sort(Comparator.comparing(ExportFeature::getName));
+        events.sort(Comparator.comparing(ExportFeature::getName));
     }
 }

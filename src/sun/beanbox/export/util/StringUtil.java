@@ -1,6 +1,6 @@
 package sun.beanbox.export.util;
 
-import sun.beanbox.export.components.ExportConstraintViolation;
+import sun.beanbox.export.datastructure.ExportConstraintViolation;
 
 import java.io.File;
 import java.util.List;
@@ -8,7 +8,7 @@ import java.util.Random;
 import java.util.regex.Pattern;
 
 /**
- * Created by Andreas on 07.07.2017.
+ * Created by Andreas Ertlschweiger on 07.07.2017.
  * <p>
  * This class offers some required functionality regarding Strings that could also be used anywhere else.
  */

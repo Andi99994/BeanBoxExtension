@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Created by Andreas on 26.05.2017.
+ * Created by Andreas Ertlschweiger on 26.05.2017.
  * <p>
  * This class describes a bean that is composed of one or more beans which are in relation to each other.
  */

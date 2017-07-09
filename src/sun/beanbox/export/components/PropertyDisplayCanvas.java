@@ -9,7 +9,7 @@ import java.beans.PropertyEditorManager;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * Created by Andreas on 20.06.2017.
+ * Created by Andreas Ertlschweiger on 20.06.2017.
  * <p>
  * This is a Canvas to print the values of properties. It uses the paintValue or
  * getAsText method of the PropertyDescriptor.
@@ -27,7 +27,7 @@ class PropertyDisplayCanvas extends Canvas {
      * @throws InvocationTargetException if there is an error accessing the property
      * @throws IllegalAccessException    if there is an error accessing the property
      */
-    public PropertyDisplayCanvas(int width, int height, ExportProperty property) throws InvocationTargetException, IllegalAccessException {
+    PropertyDisplayCanvas(int width, int height, ExportProperty property) throws InvocationTargetException, IllegalAccessException {
         setMaximumSize(new Dimension(width, height));
         setSize(new Dimension(width, height));
         setPreferredSize(new Dimension(width, height));

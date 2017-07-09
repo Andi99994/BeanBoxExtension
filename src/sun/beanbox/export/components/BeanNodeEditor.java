@@ -11,7 +11,7 @@ import java.awt.*;
 import java.util.List;
 
 /**
- * Created by Andreas on 22.06.2017.
+ * Created by Andreas Ertlschweiger on 22.06.2017.
  * <p>
  * This class represents the view to customise the BeanNodes during exporting.
  */
@@ -25,7 +25,7 @@ class BeanNodeEditor extends JPanel {
      * @param tree     the TreeView to update name changes
      * @param treeNode the node to be updated on name changes
      */
-    public BeanNodeEditor(Exporter exporter, BeanNode beanNode, JTree tree, DefaultMutableTreeNode treeNode) {
+    BeanNodeEditor(Exporter exporter, BeanNode beanNode, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
 
         Font plainFont = new Font("Dialog", Font.PLAIN, 12);

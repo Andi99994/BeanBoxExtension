@@ -10,7 +10,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Created by Andreas on 05.06.2017.
+ * Created by Andreas Ertlschweiger on 05.06.2017.
  * <p>
  * This class is a simple selection list to select input or output nodes if we cant infer them from the structure.
  */

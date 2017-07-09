@@ -6,7 +6,7 @@ import javax.swing.*;
 import java.awt.*;
 
 /**
- * Created by Andreas on 22.06.2017.
+ * Created by Andreas Ertlschweiger on 22.06.2017.
  * <p>
  * This class represents the view to customise all Properties at the same time during exporting.
  */
@@ -18,7 +18,7 @@ class AllPropertiesEditor extends JPanel {
      * @param node the node update Properties
      */
 
-    public AllPropertiesEditor(final BeanNode node) {
+    AllPropertiesEditor(final BeanNode node) {
         setLayout(new GridBagLayout());
 
         JCheckBox configurable = new JCheckBox("Enable configurability for all properties");

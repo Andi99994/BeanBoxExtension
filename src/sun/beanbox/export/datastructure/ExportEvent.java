@@ -3,7 +3,7 @@ package sun.beanbox.export.datastructure;
 import java.beans.EventSetDescriptor;
 
 /**
- * Created by Andreas on 03.07.2017.
+ * Created by Andreas Ertlschweiger on 03.07.2017.
  * <p>
  * This class describes an event of a BeanNode that can be exported.
  */

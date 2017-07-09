@@ -9,7 +9,6 @@ import sun.beanbox.HookupManager;
 import sun.beanbox.Wrapper;
 import sun.beanbox.WrapperEventTarget;
 import sun.beanbox.WrapperPropertyEventInfo;
-import sun.beanbox.export.components.ExportConstraintViolation;
 import sun.beanbox.export.components.NodeSelector;
 import sun.beanbox.export.datastructure.*;
 import sun.beanbox.export.util.JARCompiler;
@@ -35,7 +34,7 @@ import static java.nio.file.FileVisitResult.CONTINUE;
 import static java.nio.file.FileVisitResult.TERMINATE;
 
 /**
- * Created by Andreas on 06.05.2017.
+ * Created by Andreas Ertlschweiger on 06.05.2017.
  * <p>
  * This is the main component responsible for the export process. It first converts all selected Wrapper objects into
  * a better suited data structure, a directed graph, that contains all relevant information. Any changes made to the
@@ -47,19 +46,21 @@ public class Exporter {
     private HashMap<Object, Wrapper> wrapperBeanMap = new HashMap<>();
     private List<ExportBean> exportBeans = new LinkedList<>();
     private List<File> resources = new ArrayList<>();
+    //Set of all resource file names. This is for detecting conflicts during configuration
     private Set<String> resourceNames = new HashSet<>();
     private boolean keepSources = false;
 
-    private String tmpDirectoryName = "/tmp";
-    private static final String DEFAULT_MANIFEST_DIRECTORY_NAME = "META-INF";
-    private static final String DEFAULT_BEAN_DIRECTORY_NAME = "beanBox/generated/beans";
-    private static final String DEFAULT_SERIALIZED_PROPERTIES_DIRECTORY_NAME = "beanBox/generated/beans/properties";
-    private static final String DEFAULT_ADAPTER_DIRECTORY_NAME = "beanBox/generated/beans/adapters";
+    private static final String TMP_DIRECTORY_NAME = "/tmp";
+    private static final String MANIFEST_DIRECTORY_NAME = "META-INF";
+    private static final String BEAN_DIRECTORY_NAME = "beanBox/generated/beans";
+    private static final String SERIALIZED_PROPERTIES_DIRECTORY_NAME = "beanBox/generated/beans/properties";
+    private static final String ADAPTER_DIRECTORY_NAME = "beanBox/generated/beans/adapters";
 
     private static final String DEFAULT_BEAN_NAME = "ExportBean";
 
     private static final Set<String> RESERVED_METHOD_NAME_POOL = new HashSet<>(Arrays.asList(
-            "getclass", "getpeer", "notify", "wait", "propertychange", "notifyall"));
+            "getclass", "getpeer", "notify", "wait", "propertychange", "notifyall", "addpropertychangelistener",
+            "removepropertychangelistener", "getpropertychangelisteners"));
     private static final Set<String> RESERVED_PROPERTY_NAME_POOL = new HashSet<>(Arrays.asList(
             "propertychangesupport", "serialversionuid"));
     private static final Set<String> RESERVED_EVENT_NAME_POOL = new HashSet<>(Arrays.asList(
@@ -335,6 +336,7 @@ public class Exporter {
                 beanNode.getEvents().add(new ExportEvent(eventSetDescriptor, beanNode));
             }
         }
+        beanNode.sortData();
         createdNodes.put(wrapper, beanNode);
         //add all direct compositions
         for (WrapperEventTarget end : wrapper.getDirectTargets()) {
@@ -427,17 +429,17 @@ public class Exporter {
         if (!filename.endsWith(".jar")) filename += ".jar";
         File target = new File(directory, filename);
         int counter = 0;
-        while (new File(directory + tmpDirectoryName + counter).exists()) {
+        while (new File(directory + TMP_DIRECTORY_NAME + counter).exists()) {
             counter++;
         }
-        tmpDirectoryName += counter;
+        String tempDirectory = TMP_DIRECTORY_NAME + counter;
         List<ExportConstraintViolation> violations = validateConfiguration();
         if (violations == null) {
-            File tmpDirectory = new File(directory + tmpDirectoryName);
-            File tmpBeanDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_BEAN_DIRECTORY_NAME);
-            File tmpPropertiesDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_SERIALIZED_PROPERTIES_DIRECTORY_NAME);
-            File tmpManifestDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_MANIFEST_DIRECTORY_NAME);
-            File tmpAdapterDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + DEFAULT_ADAPTER_DIRECTORY_NAME);
+            File tmpDirectory = new File(directory + tempDirectory);
+            File tmpBeanDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + BEAN_DIRECTORY_NAME);
+            File tmpPropertiesDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + SERIALIZED_PROPERTIES_DIRECTORY_NAME);
+            File tmpManifestDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + MANIFEST_DIRECTORY_NAME);
+            File tmpAdapterDirectory = new File(tmpDirectory.getAbsolutePath() + File.separator + ADAPTER_DIRECTORY_NAME);
 
             if (tmpBeanDirectory.mkdirs() && tmpPropertiesDirectory.mkdirs() && tmpManifestDirectory.mkdirs() && tmpAdapterDirectory.mkdirs()) {
                 copyAndExtractResources(tmpDirectory, resources);
@@ -595,7 +597,7 @@ public class Exporter {
      * @throws IOException if there is an error writing
      */
     private File generatePropertyAdapter(File targetDirectory, PropertyBindingEdge propertyBindingEdge) throws IOException {
-        File adapter = new File(targetDirectory.getAbsolutePath() + File.separator + DEFAULT_ADAPTER_DIRECTORY_NAME,
+        File adapter = new File(targetDirectory.getAbsolutePath() + File.separator + ADAPTER_DIRECTORY_NAME,
                 StringUtil.generateName("__PropertyHookup_", 100000000, 900000000) + ".java");
         while (adapter.exists()) {
             adapter = new File(targetDirectory, StringUtil.generateName("__PropertyHookup_", 100000000, 900000000) + ".java");
@@ -639,7 +641,7 @@ public class Exporter {
                 .addField(suid)
                 .build();
 
-        JavaFile javaFile = JavaFile.builder(DEFAULT_ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), helloWorld)
+        JavaFile javaFile = JavaFile.builder(ADAPTER_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), helloWorld)
                 .build();
         javaFile.writeTo(targetDirectory);
 
@@ -719,7 +721,7 @@ public class Exporter {
                 constructor.addCode("\t" + StringUtil.lowercaseFirst(edge.getStart().getName()) + "." + edge.getEventSetDescriptor().getAddListenerMethod().getName() + "(" + StringUtil.lowercaseFirst(edge.getEnd().getName()) + ");\n");
             }
             for (PropertyBindingEdge edge : node.getPropertyBindingEdges()) {
-                String canonicalAdaperName = DEFAULT_ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();
+                String canonicalAdaperName = ADAPTER_DIRECTORY_NAME.replace("/", ".") + "." + edge.getAdapterName();
                 constructor.addCode("\t" + canonicalAdaperName + " hookup" + hookupCounter + " = new " + canonicalAdaperName + "();\n" +
                         "\thookup" + hookupCounter + ".setTarget(" + StringUtil.lowercaseFirst(edge.getEnd().getName()) + ");\n" +
                         "\t" + StringUtil.lowercaseFirst(edge.getStart().getName()) + ".add" + edge.getEventSetName() + "Listener(hookup" + hookupCounter + ");\n");
@@ -820,20 +822,20 @@ public class Exporter {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(void.class)
                     .addParameter(esd.getListenerType(), "listener")
-                    .addCode("" + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getAddListenerMethod().getName() + "(listener);")
+                    .addCode("" + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getAddListenerMethod().getName() + "(listener);\n")
                     .build());
             methods.add(MethodSpec.methodBuilder("remove" + StringUtil.uppercaseFirst(event.getName()) + "EventListener")
                     .addModifiers(Modifier.PUBLIC)
                     .returns(void.class)
                     .addParameter(esd.getListenerType(), "listener")
-                    .addCode("" + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getRemoveListenerMethod().getName() + "(listener);")
+                    .addCode("" + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getRemoveListenerMethod().getName() + "(listener);\n")
                     .build());
 
             if (event.getEventSetDescriptor().getGetListenerMethod() != null) {
                 methods.add(MethodSpec.methodBuilder("get" + StringUtil.uppercaseFirst(event.getName()) + "EventListeners")
                         .addModifiers(Modifier.PUBLIC)
                         .returns(esd.getGetListenerMethod().getReturnType())
-                        .addCode("return " + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getGetListenerMethod().getName() + "();")
+                        .addCode("return " + StringUtil.lowercaseFirst(event.getNode().getName()) + "." + esd.getGetListenerMethod().getName() + "();\n")
                         .build());
             }
         }
@@ -910,7 +912,7 @@ public class Exporter {
         bean.addFields(fields);
 
         //build the file
-        JavaFile.builder(DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), bean.build())
+        JavaFile.builder(BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), bean.build())
                 .build().writeTo(tmpDirectory);
 
         //generate BeanInfo class. We could expand it with a BeanDescriptor but it is not neccessary for the beanbox
@@ -986,7 +988,7 @@ public class Exporter {
             eventSetDescriptor.addCode("}\n");
             eventSetDescriptor.addCode("return null;\n");
         } else {
-            eventSetDescriptor.addCode("\t\treturn new EventSetDescriptor[]{};\n");
+            eventSetDescriptor.addCode("return new EventSetDescriptor[]{};\n");
         }
 
         MethodSpec.Builder methodDescriptor = MethodSpec.methodBuilder("getMethodDescriptors")
@@ -994,7 +996,7 @@ public class Exporter {
                 .addAnnotation(Override.class)
                 .returns(MethodDescriptor[].class);
 
-        if (!exportEvents.isEmpty()) {
+        if (!exportMethods.isEmpty()) {
             methodDescriptor.addCode("try {\n");
             methodDescriptor.addCode("\tClass<?> cls = " + exportBean.getName() + ".class;\n");
             StringBuilder methodDescriptorArray = new StringBuilder("{");
@@ -1040,7 +1042,7 @@ public class Exporter {
                 .addField(suid)
                 .addSuperinterface(Serializable.class);
 
-        JavaFile.builder(DEFAULT_BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), beanInfo.build())
+        JavaFile.builder(BEAN_DIRECTORY_NAME.replaceAll(Pattern.quote("/"), "."), beanInfo.build())
                 .build().writeTo(tmpDirectory);
     }
 
@@ -1086,7 +1088,7 @@ public class Exporter {
         writer.println("Manifest-Version: 1.0");
         writer.println();
         for (ExportBean exportBean : exportBeans) {
-            writer.println("Name: " + DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class");
+            writer.println("Name: " + BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class");
             writer.println("Java-Bean: True");
             writer.println();
             for (BeanNode beanNode : exportBean.getBeans()) {
@@ -1140,10 +1142,10 @@ public class Exporter {
         if (RESERVED_CLASS_NAME_POOL.contains(text)) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with reserved class name."));
         }
-        if (resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".java")
-                || resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class")
-                || resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.java")
-                || resourceNames.contains(DEFAULT_BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.class")) {
+        if (resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".java")
+                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + ".class")
+                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.java")
+                || resourceNames.contains(BEAN_DIRECTORY_NAME + "/" + exportBean.getName() + "BeanInfo.class")) {
             violations.add(new ExportConstraintViolation("ExportBean " + text + ": name conflicts with resource."));
         }
         for (ExportBean bean : exportBeans) {
@@ -1339,7 +1341,8 @@ public class Exporter {
             }
         }
         for (ExportMethod method : exportBean.getMethods()) {
-            if (method.getName().equals(text) && method != exportMethod) {
+            if (method.getName().equals(text) && method != exportMethod
+                    && Arrays.equals(method.getMethodDescriptor().getMethod().getParameterTypes(), exportMethod.getMethodDescriptor().getMethod().getParameterTypes())) {
                 violations.add(new ExportConstraintViolation("Method " + text + " of Bean " +
                         exportMethod.getNode().getName() + ": name conflicts with method " + method.getName() + " of Bean " +
                         method.getNode().getName() + "."));

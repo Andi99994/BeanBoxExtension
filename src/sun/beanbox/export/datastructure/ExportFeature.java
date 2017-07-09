@@ -1,7 +1,7 @@
 package sun.beanbox.export.datastructure;
 
 /**
- * Created by Andreas on 09.07.2017.
+ * Created by Andreas Ertlschweiger on 09.07.2017.
  * <p>
  * This class describes the basic fields and methods for any exportable feature(properties, events, methods) of a BeanNode.
  */

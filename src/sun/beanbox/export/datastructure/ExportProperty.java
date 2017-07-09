@@ -4,7 +4,7 @@ import java.beans.PropertyDescriptor;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * Created by Andreas on 26.05.2017.
+ * Created by Andreas Ertlschweiger on 26.05.2017.
  * <p>
  * This class describes a property of a BeanNode that can be exported.
  * <p>

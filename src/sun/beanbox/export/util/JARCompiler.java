@@ -13,7 +13,7 @@ import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
 /**
- * Created by Andreas on 07.07.2017.
+ * Created by Andreas Ertlschweiger on 07.07.2017.
  * <p>
  * Util class to compile and pack resources into a JAR file.
  */

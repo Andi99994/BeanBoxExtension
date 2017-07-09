@@ -2,6 +2,7 @@ package sun.beanbox.export.components;
 
 import sun.beanbox.export.Exporter;
 import sun.beanbox.export.datastructure.ExportBean;
+import sun.beanbox.export.datastructure.ExportConstraintViolation;
 import sun.beanbox.export.datastructure.ExportEvent;
 import sun.beanbox.export.util.StringUtil;
 
@@ -11,7 +12,7 @@ import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 
 /**
- * Created by Andreas on 22.06.2017.
+ * Created by Andreas Ertlschweiger on 22.06.2017.
  * <p>
  * This class represents the view to customise the ExportEvents during exporting.
  */
@@ -25,7 +26,7 @@ class ExportEventEditor extends JPanel {
      * @param tree        the TreeView to update name changes
      * @param treeNode    the node to be updated on name changes
      */
-    public ExportEventEditor(Exporter exporter, ExportEvent exportEvent, JTree tree, DefaultMutableTreeNode treeNode) {
+    ExportEventEditor(Exporter exporter, ExportEvent exportEvent, JTree tree, DefaultMutableTreeNode treeNode) {
         setLayout(new GridBagLayout());
         ExportBean exportBean = null;
         DefaultMutableTreeNode current = treeNode;
