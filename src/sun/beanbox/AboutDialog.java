@@ -25,6 +25,9 @@ public class AboutDialog extends MessageDialog {
             + "\n"
             + "Fearless Product Marketing\n"
             + "Gina Centoni, Onno Kluyt, Frank Rimalovski\n"
+            + "\n"
+            + "Extension for Hierarchical Composition and Tweaks\n"
+            + "Andreas Ertlschweiger\n"
             + "\n";
 
 

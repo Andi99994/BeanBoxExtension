@@ -207,7 +207,19 @@ public class Exporter {
             for (Object bean : wrapper.getCompositionTargets()) {
                 Wrapper beanWrapper = wrapperBeanMap.get(bean);
                 if (beanWrapper != null) {
-                    groupMap.replace(beanWrapper, curGroup);
+                    //check if we have conflicting groups to handle special configurations. We need to check this
+                    //explicitly AFTER putting the wrappers into the wrong group because each Wrapper only knows its
+                    // direct successors and can't efficiently traverse the graph
+                    if(groupMap.get(beanWrapper) != null) {
+                        Integer conflictingGroup = groupMap.get(beanWrapper);
+                        for (Map.Entry<Wrapper, Integer> entry : groupMap.entrySet()) {
+                            if (entry.getValue().equals(curGroup)) {
+                                groupMap.replace(entry.getKey(), conflictingGroup);
+                            }
+                        }
+                    } else {
+                        groupMap.replace(beanWrapper, curGroup);
+                    }
                 }
             }
         }
